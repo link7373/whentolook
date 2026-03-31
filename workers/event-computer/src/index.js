@@ -4,6 +4,7 @@ import { computeIssEvents } from './events/iss.js';
 import { computeFullMoonEvents } from './events/fullmoons.js';
 import { computeEclipseEvents } from './events/eclipses.js';
 import { computeAsteroidEvents } from './events/asteroids.js';
+import { computeStarlinkEvents } from './events/starlink.js';
 
 export default {
   // Cron trigger: runs daily at 00:00 UTC
@@ -85,8 +86,12 @@ async function processSubscriber(subscriber, types, now, env) {
     allEvents.push(...asteroidEvents);
   }
 
-  // Additional event types will be added here in future tasks:
-  // if (types.includes('aurora')) { ... }
+  if (types.includes('starlink')) {
+    const starlinkEvents = await computeStarlinkEvents(subscriber, now, env.DB, env.N2YO_API_KEY);
+    allEvents.push(...starlinkEvents);
+  }
+
+  // Aurora is handled by a separate real-time worker (aurora-monitor), not queued here.
 
   if (allEvents.length === 0) return;
 

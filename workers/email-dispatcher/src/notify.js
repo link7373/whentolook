@@ -36,6 +36,7 @@ function renderTemplate(event) {
     lunar_eclipse: renderLunarEclipse,
     solar_eclipse: renderSolarEclipse,
     asteroid: renderAsteroid,
+    starlink: renderStarlink,
   };
 
   const renderer = templates[event.event_type];
@@ -255,6 +256,27 @@ function renderSolarEclipse(data) {
     html: emailWrapper({
       title: 'Solar Eclipse Today',
       subtitle: `${data.type.charAt(0).toUpperCase() + data.type.slice(1)} eclipse — ${data.path_description}`,
+      bodyHtml,
+      unsubscribeToken: data.unsubscribe_token,
+    }),
+  };
+}
+
+function renderStarlink(data) {
+  const durationMins = Math.round(data.duration_seconds / 60);
+
+  const bodyHtml = [
+    section('Where to look', `Face <strong style="color:#1a1f2e;">${data.start_az_compass}</strong> and watch for a line of bright dots moving in a row across the sky — like a string of pearls. They'll travel toward the ${data.end_az_compass}. Visible for about ${durationMins} minute${durationMins !== 1 ? 's' : ''}.`),
+    section('What they are', `These are ${data.recent_satellite_count} recently-launched SpaceX Starlink internet satellites, still traveling in formation after launch. They'll gradually spread apart and become invisible over the next few weeks.`),
+    section('Fun fact', 'Many people mistake Starlink trains for UFOs. Now you know better — and you can explain it to whoever is standing next to you.'),
+    section('Tip', 'They move fast — have someone with you to point and look simultaneously. The train spans several degrees of sky.'),
+  ].join('\n');
+
+  return {
+    subject: `✨ Starlink satellite train visible in 30 minutes`,
+    html: emailWrapper({
+      title: 'Starlink Satellite Train',
+      subtitle: `Visible in 30 minutes — look ${data.start_az_compass}`,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
