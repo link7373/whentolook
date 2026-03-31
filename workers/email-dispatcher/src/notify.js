@@ -12,7 +12,7 @@ export async function notify(subscriber, event, resendApiKey) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'When To Look <hello@whentolook.com>',
+      from: 'When To Look <hello@resend.dev>', // TODO: switch to hello@whentolook.com once AWS SES is set up
       to: subscriber.email,
       subject,
       html,
