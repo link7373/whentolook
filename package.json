@@ -1,0 +1,13 @@
+{
+  "name": "whentolook",
+  "private": true,
+  "scripts": {
+    "deploy:api": "cd workers/api && wrangler deploy",
+    "deploy:event-computer": "cd workers/event-computer && wrangler deploy",
+    "deploy:aurora-monitor": "cd workers/aurora-monitor && wrangler deploy",
+    "deploy:email-dispatcher": "cd workers/email-dispatcher && wrangler deploy",
+    "deploy:all": "npm run deploy:api && npm run deploy:event-computer && npm run deploy:aurora-monitor && npm run deploy:email-dispatcher",
+    "dev:api": "cd workers/api && wrangler dev",
+    "dev:dispatcher": "cd workers/email-dispatcher && wrangler dev"
+  }
+}
