@@ -1,0 +1,11 @@
+name = "whentolook-email-dispatcher"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "whentolook"
+database_id = "3259f244-3af0-4219-b830-12b64174b3d1"
