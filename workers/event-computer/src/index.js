@@ -1,6 +1,9 @@
 // index.js
 import { computeMeteorEvents } from './events/meteors.js';
 import { computeIssEvents } from './events/iss.js';
+import { computeFullMoonEvents } from './events/fullmoons.js';
+import { computeEclipseEvents } from './events/eclipses.js';
+import { computeAsteroidEvents } from './events/asteroids.js';
 
 export default {
   // Cron trigger: runs daily at 00:00 UTC
@@ -62,8 +65,27 @@ async function processSubscriber(subscriber, types, now, env) {
     allEvents.push(...issEvents);
   }
 
+  if (types.includes('fullmoon')) {
+    const fullMoonEvents = await computeFullMoonEvents(subscriber, now, env.DB);
+    allEvents.push(...fullMoonEvents);
+  }
+
+  if (types.includes('lunar_eclipse') || types.includes('solar_eclipse')) {
+    const eclipseEvents = await computeEclipseEvents(subscriber, now, env.DB);
+    // Filter by which eclipse types the subscriber wants
+    for (const evt of eclipseEvents) {
+      if (types.includes(evt.event_type)) {
+        allEvents.push(evt);
+      }
+    }
+  }
+
+  if (types.includes('asteroid')) {
+    const asteroidEvents = await computeAsteroidEvents(subscriber, now, env.DB);
+    allEvents.push(...asteroidEvents);
+  }
+
   // Additional event types will be added here in future tasks:
-  // if (types.includes('fullmoon')) { ... }
   // if (types.includes('aurora')) { ... }
 
   if (allEvents.length === 0) return;
