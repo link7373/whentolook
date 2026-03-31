@@ -1,5 +1,6 @@
 // index.js
 import { computeMeteorEvents } from './events/meteors.js';
+import { computeIssEvents } from './events/iss.js';
 
 export default {
   // Cron trigger: runs daily at 00:00 UTC
@@ -56,8 +57,12 @@ async function processSubscriber(subscriber, types, now, env) {
     allEvents.push(...meteorEvents);
   }
 
+  if (types.includes('iss')) {
+    const issEvents = await computeIssEvents(subscriber, now, env.DB, env.N2YO_API_KEY);
+    allEvents.push(...issEvents);
+  }
+
   // Additional event types will be added here in future tasks:
-  // if (types.includes('iss')) { ... }
   // if (types.includes('fullmoon')) { ... }
   // if (types.includes('aurora')) { ... }
 

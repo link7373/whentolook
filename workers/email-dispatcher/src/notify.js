@@ -31,6 +31,7 @@ export async function notify(subscriber, event, resendApiKey) {
 function renderTemplate(event) {
   const templates = {
     meteor: renderMeteor,
+    iss: renderIss,
   };
 
   const renderer = templates[event.event_type];
@@ -44,6 +45,69 @@ function renderMeteor(data) {
     subject: `🌠 ${data.name} meteor shower peaks tonight`,
     html: meteorHtml(data),
   };
+}
+
+function renderIss(data) {
+  const durationMins = Math.round(data.duration_seconds / 60);
+  const elevLabel = data.max_elevation >= 60 ? 'very bright, high arc'
+    : data.max_elevation >= 45 ? 'bright pass'
+    : 'good pass';
+
+  return {
+    subject: `🛰️ Space Station visible in 30 minutes — look ${data.start_az_compass}`,
+    html: issHtml(data, durationMins, elevLabel),
+  };
+}
+
+function issHtml(data, durationMins, elevLabel) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; padding: 0; background: #0B0F1A; font-family: 'DM Sans', Arial, sans-serif; color: #E8E6E1; }
+  .container { max-width: 600px; margin: 0 auto; padding: 40px 24px; }
+  .header { font-size: 13px; color: #6B7280; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 32px; }
+  h1 { font-family: Georgia, serif; font-size: 28px; font-weight: normal; color: #E8E6E1; margin: 0 0 8px; line-height: 1.3; }
+  .meta { color: #D4A853; font-size: 14px; margin-bottom: 32px; }
+  .section { margin-bottom: 24px; line-height: 1.7; font-size: 15px; color: #C9C7C2; }
+  .section strong { color: #E8E6E1; }
+  .divider { border: none; border-top: 1px solid #1E2535; margin: 28px 0; }
+  .footer { font-size: 12px; color: #4B5563; line-height: 1.6; }
+  .footer a { color: #6B7280; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">When To Look</div>
+  <h1>International Space Station</h1>
+  <div class="meta">Visible overhead in 30 minutes — ${elevLabel}</div>
+
+  <div class="section">
+    <strong>Where to look:</strong> Face <strong>${data.start_az_compass}</strong> and watch for a bright, steady light moving smoothly toward the ${data.end_az_compass}. No blinking — that's how you know it's not a plane.
+  </div>
+
+  <div class="section">
+    <strong>How long:</strong> Visible for about ${durationMins} minute${durationMins !== 1 ? 's' : ''}, climbing to ${data.max_elevation}° above the horizon at its peak.
+  </div>
+
+  <div class="section">
+    <strong>What you're seeing:</strong> A structure the size of a football field, orbiting 250 miles above your head at 17,500 mph. There are astronauts living and working up there right now.
+  </div>
+
+  <div class="section">
+    <strong>Tip:</strong> It moves fast — once you spot it, it crosses the sky in just a few minutes. Watch for it to fade as it enters Earth's shadow.
+  </div>
+
+  <hr class="divider">
+  <div class="footer">
+    You're receiving this because you signed up at <a href="https://whentolook.com">whentolook.com</a><br>
+    <a href="https://whentolook.com/unsubscribe?token=${data.unsubscribe_token}">Unsubscribe</a> · <a href="https://whentolook.com/preferences?token=${data.unsubscribe_token}">Manage preferences</a>
+  </div>
+</div>
+</body>
+</html>`;
 }
 
 function meteorHtml(data) {
