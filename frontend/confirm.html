@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirming… — When To Look</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0B0F1A;
+      --text-white: #E8E6E1;
+      --text-muted: #9a97b0;
+      --gold: #D4A853;
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      color: var(--text-white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: 2.2rem;
+      font-weight: 400;
+      margin-bottom: 16px;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      font-weight: 300;
+      line-height: 1.7;
+      max-width: 420px;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 2px solid rgba(212, 168, 83, 0.2);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 32px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .home-link {
+      display: inline-block;
+      margin-top: 32px;
+      color: var(--gold);
+      font-size: 0.9rem;
+      text-decoration: none;
+    }
+    .home-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="content">
+    <div class="spinner"></div>
+    <h1>Confirming your subscription…</h1>
+    <p>Just a moment while we verify your email.</p>
+  </div>
+
+  <script>
+    // The API worker handles the /confirm?token= endpoint and redirects to /?confirmed=1
+    // This page is a fallback in case that redirect doesn't happen.
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token) {
+      fetch('https://whentolook-api.link7373.workers.dev/confirm?token=' + encodeURIComponent(token))
+        .then((res) => {
+          if (res.ok || res.redirected) {
+            window.location.href = '/?confirmed=1';
+          } else {
+            document.getElementById('content').innerHTML =
+              '<h1>Hmm, something went wrong.</h1><p>This confirmation link may have already been used or has expired.</p><a class="home-link" href="/">Back to When To Look &rarr;</a>';
+          }
+        })
+        .catch(() => {
+          document.getElementById('content').innerHTML =
+            '<h1>Network error</h1><p>Could not reach the server. Please try again in a moment.</p><a class="home-link" href="/">Back to When To Look &rarr;</a>';
+        });
+    } else {
+      document.getElementById('content').innerHTML =
+        '<h1>Nothing to confirm</h1><p>No confirmation token found. If you clicked a link from your email, it may have been truncated.</p><a class="home-link" href="/">Back to When To Look &rarr;</a>';
+    }
+  </script>
+</body>
+</html>
