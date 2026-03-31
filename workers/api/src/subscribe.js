@@ -68,24 +68,54 @@ export async function handleSubscribe(request, env) {
 async function sendConfirmationEmail(email, token, env) {
   const confirmUrl = `https://whentolook.com/confirm?token=${token}`;
   const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><style>
-  body { margin: 0; padding: 0; background: #0B0F1A; font-family: Arial, sans-serif; color: #E8E6E1; }
-  .container { max-width: 600px; margin: 0 auto; padding: 40px 24px; }
-  .header { font-size: 13px; color: #6B7280; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 32px; }
-  h1 { font-family: Georgia, serif; font-size: 24px; font-weight: normal; margin: 0 0 16px; }
-  p { color: #C9C7C2; line-height: 1.7; font-size: 15px; }
-  .btn { display: inline-block; background: #D4A853; color: #0B0F1A; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; margin: 24px 0; font-size: 15px; }
-  .footer { margin-top: 40px; font-size: 12px; color: #4B5563; }
-</style></head>
-<body><div class="container">
-  <div class="header">When To Look</div>
-  <h1>Confirm your subscription</h1>
-  <p>You're one click away from getting notified before meteor showers, ISS passes, eclipses, auroras, and more — personalized to your exact location.</p>
-  <a href="${confirmUrl}" class="btn">Confirm my email →</a>
-  <p>If you didn't sign up, you can safely ignore this email.</p>
-  <div class="footer">whentolook.com</div>
-</div></body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirm your subscription — When To Look</title>
+<style>
+  @media only screen and (max-width:620px) {
+    .outer-table { padding: 16px 8px !important; }
+    .inner-table { border-radius: 0 !important; }
+    .content-cell { padding: 28px 24px 32px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table class="outer-table" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table class="inner-table" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);overflow:hidden;">
+        <!-- Brand stripe -->
+        <tr>
+          <td style="background:#0B0F1A;height:8px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <!-- Content -->
+        <tr>
+          <td class="content-cell" style="padding:36px 40px 40px;">
+            <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">When To Look</p>
+            <h1 style="margin:8px 0 16px;font-size:26px;font-weight:700;color:#1a1f2e;line-height:1.3;">Confirm your subscription</h1>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;">
+            <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#4B5563;">
+              You're one click away from getting notified before meteor showers, ISS passes, eclipses, auroras, and more — personalized to your exact location.
+            </p>
+            <p style="margin:0 0 32px;">
+              <a href="${confirmUrl}" style="background:#D4A853;color:#0B0F1A;padding:12px 28px;border-radius:6px;font-weight:700;text-decoration:none;display:inline-block;font-size:15px;">Confirm my email &rarr;</a>
+            </p>
+            <p style="margin:0 0 32px;font-size:14px;line-height:1.6;color:#9CA3AF;">
+              If you didn't sign up, you can safely ignore this email.
+            </p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 20px;">
+            <p style="margin:0;font-size:11px;color:#9CA3AF;text-align:center;line-height:1.8;">
+              <a href="https://whentolook.com" style="color:#D4A853;text-decoration:none;">whentolook.com</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
 </html>`;
 
   const res = await fetch('https://api.resend.com/emails', {
