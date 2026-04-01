@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>When To Look — Sky event notifications for wherever you are</title>
-  <meta name="description" content="Get a notification before meteor showers, ISS passes, eclipses, auroras, and more — personalized to your exact location. Free.">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <meta property="og:title" content="When To Look — Sky event notifications">
-  <meta property="og:description" content="We'll tell you when to look up. Free night sky alerts for meteor showers, ISS passes, eclipses, auroras, and more.">
+  <title>When To Look — Night sky notifications</title>
+  <meta name="description" content="Free alerts before meteor showers, ISS passes, eclipses, auroras, and more — personalized to your exact location.">
+  <meta property="og:title" content="When To Look — Night sky notifications">
+  <meta property="og:description" content="We'll tell you when to look up. Free night sky alerts personalized to your location.">
   <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
@@ -16,37 +16,44 @@
 </head>
 <body>
 
-  <!-- Star field background layers -->
+  <!-- Background layers -->
+  <div class="nebula" aria-hidden="true"></div>
   <div class="stars-layer" aria-hidden="true"></div>
   <div class="stars-large" aria-hidden="true"></div>
+  <div class="stars-micro" aria-hidden="true"></div>
 
-  <!-- Confirmed subscription banner (shown via JS if ?confirmed=1) -->
-  <div id="confirmed-banner" role="alert">
-    ✅ Your email is confirmed — you're all set! We'll be in touch the next time something is visible from your location.
+  <!-- Confirmed subscription banner (shown if ?confirmed=1) -->
+  <div id="confirmed-banner" role="alert" hidden>
+    ✅ You're confirmed — we'll email you before your next sky event.
   </div>
 
-  <!-- ======================================================
+  <!-- ====================================================
        SECTION 1: HERO
-       ====================================================== -->
+       ==================================================== -->
   <section id="hero" aria-label="Introduction">
     <span class="hero-eyebrow">Night sky notifications</span>
-    <h1 class="hero-h1">We'll tell you when<br>to look up.</h1>
+    <h1 class="hero-h1">We'll tell you<br><em>when to look up.</em></h1>
     <p class="hero-sub">
-      Get a notification before meteor showers, ISS passes, eclipses,
-      auroras, and more — personalized to your exact location. Free.
+      Free alerts before meteor showers, ISS passes, eclipses,
+      auroras, and more — personalized to your exact location.
     </p>
-    <a href="#signup" class="hero-cta">Get notified &rarr;</a>
-
-    <div class="hero-scroll-hint" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="6 9 12 15 18 9"></polyline>
-      </svg>
-    </div>
+    <form class="hero-form" id="email-form" novalidate>
+      <input
+        type="email"
+        id="hero-email"
+        placeholder="your@email.com"
+        autocomplete="email"
+        required
+        aria-label="Your email address"
+      >
+      <button type="submit">Notify me &rarr;</button>
+    </form>
+    <p class="hero-error" id="hero-error" role="alert"></p>
   </section>
 
-  <!-- ======================================================
+  <!-- ====================================================
        SECTION 2: HOW IT WORKS
-       ====================================================== -->
+       ==================================================== -->
   <section id="how-it-works" aria-label="How it works">
     <div class="container">
       <h2>How it works</h2>
@@ -56,459 +63,71 @@
 
         <div class="step">
           <div class="step-number">1</div>
-          <h3>Tell us where you are</h3>
-          <p>Use your browser's location or type your city. We only use it to compute sky events for your coordinates — nothing else.</p>
+          <h3>Enter your email</h3>
+          <p>Just your address to get started — takes 5 seconds.</p>
         </div>
 
         <div class="step-connector" aria-hidden="true">&#8594;</div>
 
         <div class="step">
           <div class="step-number">2</div>
-          <h3>Pick what you care about</h3>
-          <p>Choose from 8 event types. All selected by default — uncheck anything you don't want.</p>
-          <ul class="event-list" aria-label="Available event types">
-            <li><span class="check">&#10003;</span> ISS Passes</li>
-            <li><span class="check">&#10003;</span> Starlink Trains</li>
-            <li><span class="check">&#10003;</span> Meteor Showers</li>
-            <li><span class="check">&#10003;</span> Full Moons &amp; Supermoons</li>
-            <li><span class="check">&#10003;</span> Lunar Eclipses</li>
-            <li><span class="check">&#10003;</span> Solar Eclipses</li>
-            <li><span class="check">&#10003;</span> Aurora / Northern Lights</li>
-            <li><span class="check">&#10003;</span> Asteroid Close Approaches</li>
-          </ul>
+          <h3>Choose your events</h3>
+          <p>Pick from 8 sky event types and share your location so we know what's visible from your sky.</p>
         </div>
 
         <div class="step-connector" aria-hidden="true">&#8594;</div>
 
         <div class="step">
           <div class="step-number">3</div>
-          <h3>Enter your email</h3>
-          <p>That's it. We'll email you before each event with exactly what to look for, where, and when — so you can step outside and look up.</p>
+          <h3>Look up</h3>
+          <p>We email you 15–30 minutes before each event with exactly what to look for, where, and when.</p>
         </div>
 
       </div>
     </div>
   </section>
 
-  <!-- ======================================================
-       SECTION 3: SIGN-UP FORM
-       ====================================================== -->
-  <section id="signup" aria-label="Sign up">
+  <!-- ====================================================
+       SECTION 3: EMAIL PREVIEW (mockup inserted by Task 4)
+       ==================================================== -->
+  <section id="email-preview" aria-label="Example notification">
     <div class="container">
-      <h2>Start watching the sky</h2>
-      <p class="section-sub">It takes less than 30 seconds.</p>
-
-      <div class="form-wrapper">
-        <form id="signup-form" novalidate>
-
-          <!-- Hidden coordinate fields -->
-          <input type="hidden" id="lat" name="latitude">
-          <input type="hidden" id="lng" name="longitude">
-          <input type="hidden" id="timezone" name="timezone">
-          <input type="hidden" id="location-name" name="location_name">
-
-          <!-- Location detection -->
-          <div class="location-row">
-            <button type="button" id="detect-location" class="btn-detect">
-              📍 Use my location
-            </button>
-            <span class="or-divider">or</span>
-            <input
-              type="text"
-              id="city-input"
-              class="city-input"
-              placeholder="City, country (e.g. Seattle, US)"
-              autocomplete="off"
-              aria-label="Enter your city"
-            >
-          </div>
-          <div id="location-status" class="location-status" role="status" aria-live="polite"></div>
-
-          <!-- Event type checkboxes -->
-          <span class="form-label-heading">What do you want to know about?</span>
-          <div class="checkbox-grid" role="group" aria-label="Event types">
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="iss" checked>
-              <div class="checkbox-label">
-                <strong>🛰️ ISS Passes</strong>
-                <span>Space Station visible overhead</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="starlink" checked>
-              <div class="checkbox-label">
-                <strong>✨ Starlink Trains</strong>
-                <span>Newly-launched satellites in formation</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="meteor" checked>
-              <div class="checkbox-label">
-                <strong>🌠 Meteor Showers</strong>
-                <span>Peak nights for shooting stars</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="fullmoon" checked>
-              <div class="checkbox-label">
-                <strong>🌕 Full Moons &amp; Supermoons</strong>
-                <span>Including traditional moon names</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="lunar_eclipse" checked>
-              <div class="checkbox-label">
-                <strong>🌑 Lunar Eclipses</strong>
-                <span>Earth's shadow turns the Moon red</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="solar_eclipse" checked>
-              <div class="checkbox-label">
-                <strong>🌗 Solar Eclipses</strong>
-                <span>When the Moon blocks the Sun</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="aurora" checked>
-              <div class="checkbox-label">
-                <strong>🌌 Aurora / Northern Lights</strong>
-                <span>Real-time geomagnetic storm alerts</span>
-              </div>
-            </label>
-
-            <label class="checkbox-item">
-              <input type="checkbox" name="event_type" value="asteroid" checked>
-              <div class="checkbox-label">
-                <strong>☄️ Asteroid Close Approaches</strong>
-                <span>Notable space rocks flying by</span>
-              </div>
-            </label>
-
-          </div>
-
-          <!-- Email + Submit -->
-          <div class="email-row">
-            <input
-              type="email"
-              id="email"
-              name="email"
-              class="email-input"
-              placeholder="your@email.com"
-              required
-              autocomplete="email"
-              aria-label="Email address"
-            >
-            <button type="submit" id="submit-btn" class="btn-submit">
-              Notify me &rarr;
-            </button>
-          </div>
-
-          <!-- Status message -->
-          <div id="form-status" class="form-status" role="alert" aria-live="assertive"></div>
-
-          <p class="privacy-note">
-            No spam. No ads. Just sky.<br>
-            We store only your email and location to send you notifications. Unsubscribe any time with one click.
-          </p>
-
-        </form>
-      </div>
+      <h2>What you'll receive</h2>
+      <p class="section-sub">A focused notification with everything you need — nothing you don't.</p>
+      <!-- EMAIL MOCKUP PLACEHOLDER -->
     </div>
   </section>
 
-  <!-- ======================================================
-       SECTION 4: EXAMPLE NOTIFICATION MOCKUP
-       ====================================================== -->
-  <section id="example" aria-label="Example notification">
-    <div class="container">
-      <h2>What you'll get</h2>
-      <p class="section-sub">Here's an example of a Perseids meteor shower notification:</p>
-
-      <div class="email-mockup-wrapper">
-        <article class="email-card" aria-label="Example email notification">
-
-          <!-- Email top bar -->
-          <div class="email-topbar">
-            <span class="email-brand">When To Look</span>
-            <span class="email-badge">hello@whentolook.com</span>
-          </div>
-
-          <!-- Email body -->
-          <div class="email-body">
-            <div class="email-event-label">🌠 Meteor Shower</div>
-            <h3 class="email-h1">Perseids Meteor Shower</h3>
-            <p class="email-subtitle">Peaks tonight — up to 100 meteors per hour</p>
-
-            <div class="email-stat-row" aria-label="Key figures">
-              <div class="email-stat">
-                <div class="stat-val">100</div>
-                <div class="stat-key">Meteors/hr</div>
-              </div>
-              <div class="email-stat">
-                <div class="stat-val">58</div>
-                <div class="stat-key">km/s speed</div>
-              </div>
-              <div class="email-stat">
-                <div class="stat-val">9:41 PM</div>
-                <div class="stat-key">Best after</div>
-              </div>
-            </div>
-
-            <div class="email-divider"></div>
-
-            <div class="email-section">
-              <div class="email-section-label">Where &amp; how to look</div>
-              <p>
-                Go outside after 9:41&nbsp;PM once astronomical twilight ends.
-                <span class="highlight">Lie flat on your back and look straight up</span> —
-                meteors appear all across the sky, streaming away from Perseus in the northeast.
-                The longest, most spectacular streaks appear 30–45° away from that point.
-                No telescope needed.
-              </p>
-            </div>
-
-            <div class="email-section">
-              <div class="email-section-label">What you're actually seeing</div>
-              <p>
-                Each streak is a grain of dust — some no bigger than a pea — shed by
-                Comet 109P/Swift-Tuttle hitting Earth's atmosphere at 58&nbsp;km/s
-                and vaporising 80–100&nbsp;km above your head.
-                Swift-Tuttle last passed Earth in 1992 and won't return until 2126,
-                but it leaves this trail of debris behind every year.
-              </p>
-            </div>
-
-            <div class="email-section">
-              <div class="email-section-label">Tonight's conditions</div>
-              <p>
-                The Moon is 18% illuminated — <span class="highlight">excellent conditions</span>.
-                Give your eyes 20 minutes to adjust to the dark.
-                A blanket and a reclining chair make this much better.
-                Peak activity continues until dawn.
-              </p>
-            </div>
-          </div>
-
-          <!-- Email footer -->
-          <div class="email-footer">
-            <p class="email-footer-text">
-              You're receiving this because you signed up at whentolook.com
-            </p>
-            <div class="email-footer-links" aria-label="Email management links">
-              <a href="#" tabindex="-1">Preferences</a>
-              <a href="#" tabindex="-1">Unsubscribe</a>
-            </div>
-          </div>
-
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================================================
-       SECTION 5: FOOTER
-       ====================================================== -->
-  <footer id="footer">
-    <div class="footer-inner">
-      <span class="footer-brand">When To Look</span>
-      <span class="footer-tagline">No spam. No ads. Just sky.</span>
-    </div>
-    <p class="footer-bottom container">
-      &copy; 2026 &middot; Privacy: we store only your email and location to send you notifications.
+  <!-- ====================================================
+       FOOTER
+       ==================================================== -->
+  <footer>
+    <p>
+      Made with ☽ for people who look up &nbsp;&middot;&nbsp;
+      <a href="mailto:hello@whentolook.com">hello@whentolook.com</a> &nbsp;&middot;&nbsp;
+      Privacy: we store only your email and location.
     </p>
   </footer>
 
-  <!-- ======================================================
-       JAVASCRIPT
-       ====================================================== -->
   <script>
-    // ── Geolocation detection ──────────────────────────────
-    const detectBtn = document.getElementById('detect-location');
-    const locationStatus = document.getElementById('location-status');
-
-    detectBtn.addEventListener('click', () => {
-      if (!navigator.geolocation) {
-        locationStatus.textContent = 'Geolocation is not supported by your browser.';
-        return;
-      }
-      detectBtn.textContent = '⏳ Detecting…';
-      detectBtn.disabled = true;
-
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
-          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-          document.getElementById('lat').value = latitude;
-          document.getElementById('lng').value = longitude;
-          document.getElementById('timezone').value = timezone;
-
-          // Reverse geocode with Nominatim
-          try {
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-              { headers: { 'Accept-Language': 'en' } }
-            );
-            const data = await res.json();
-            const addr = data.address || {};
-            const city =
-              addr.city || addr.town || addr.village || addr.county || addr.state || 'Your location';
-            const country = addr.country_code ? addr.country_code.toUpperCase() : '';
-            const locationName = city + (country ? ', ' + country : '');
-
-            document.getElementById('location-name').value = locationName;
-            locationStatus.textContent = '📍 ' + locationName + ' detected';
-          } catch {
-            // Geocoding failed — still have coordinates
-            document.getElementById('location-name').value = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-            locationStatus.textContent = '📍 Location detected';
-          }
-
-          detectBtn.textContent = '📍 Use my location';
-          detectBtn.disabled = false;
-        },
-        (err) => {
-          detectBtn.textContent = '📍 Use my location';
-          detectBtn.disabled = false;
-          if (err.code === 1) {
-            locationStatus.textContent = 'Location access denied — please type your city below.';
-          } else {
-            locationStatus.textContent = 'Could not detect location — please type your city below.';
-          }
-        },
-        { timeout: 10000 }
-      );
-    });
-
-    // ── Manual city geocoding ──────────────────────────────
-    const cityInput = document.getElementById('city-input');
-
-    async function geocodeCity(cityStr) {
-      if (!cityStr.trim()) return;
-      locationStatus.textContent = '⏳ Looking up ' + cityStr + '…';
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityStr)}&format=json&limit=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        const data = await res.json();
-        if (data && data[0]) {
-          const result = data[0];
-          const parts = result.display_name.split(',');
-          const locationName = parts.slice(0, 2).join(',').trim();
-
-          document.getElementById('lat').value = result.lat;
-          document.getElementById('lng').value = result.lon;
-          document.getElementById('timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          document.getElementById('location-name').value = locationName;
-          locationStatus.textContent = '📍 ' + locationName;
-        } else {
-          locationStatus.textContent = 'City not found — try a different spelling.';
-        }
-      } catch {
-        locationStatus.textContent = 'Could not look up city — please try again.';
-      }
+    // Show confirmed banner if ?confirmed=1
+    if (new URLSearchParams(location.search).get('confirmed') === '1') {
+      document.getElementById('confirmed-banner').hidden = false;
     }
 
-    // Trigger geocoding on blur or Enter
-    cityInput.addEventListener('change', (e) => geocodeCity(e.target.value));
-    cityInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        geocodeCity(e.target.value);
-      }
-    });
-
-    // ── Form submission ────────────────────────────────────
-    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+    // Email form → redirect to setup page
+    document.getElementById('email-form').addEventListener('submit', function(e) {
       e.preventDefault();
-
-      const email = document.getElementById('email').value.trim();
-      const lat = parseFloat(document.getElementById('lat').value);
-      const lng = parseFloat(document.getElementById('lng').value);
-      const timezone = document.getElementById('timezone').value;
-      const locationName = document.getElementById('location-name').value;
-
-      if (!email) {
-        showStatus('Please enter your email address.', 'error');
+      const email = document.getElementById('hero-email').value.trim();
+      const errorEl = document.getElementById('hero-error');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errorEl.textContent = 'Please enter a valid email address.';
+        errorEl.style.display = 'block';
         return;
       }
-
-      if (!lat || !lng || !timezone) {
-        showStatus('Please detect your location or type your city first.', 'error');
-        return;
-      }
-
-      const checkedBoxes = [...document.querySelectorAll('input[name="event_type"]:checked')];
-      if (checkedBoxes.length === 0) {
-        showStatus('Please select at least one event type.', 'error');
-        return;
-      }
-      const preferences = checkedBoxes.map((cb) => cb.value);
-
-      const btn = document.getElementById('submit-btn');
-      btn.textContent = 'Sending…';
-      btn.disabled = true;
-      hideStatus();
-
-      try {
-        const res = await fetch('https://whentolook-api.link7373.workers.dev/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            latitude: lat,
-            longitude: lng,
-            location_name: locationName,
-            timezone,
-            preferences,
-          }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-          showStatus('✅ Check your email to confirm your subscription!', 'success');
-          document.getElementById('signup-form').reset();
-          // Re-check all checkboxes after reset
-          document.querySelectorAll('input[name="event_type"]').forEach((cb) => (cb.checked = true));
-          locationStatus.textContent = '';
-        } else {
-          showStatus(data.error || 'Something went wrong. Please try again.', 'error');
-        }
-      } catch {
-        showStatus('Network error — please check your connection and try again.', 'error');
-      } finally {
-        btn.textContent = 'Notify me →';
-        btn.disabled = false;
-      }
+      errorEl.style.display = 'none';
+      window.location.href = 'setup.html?email=' + encodeURIComponent(email);
     });
-
-    function showStatus(msg, type) {
-      const el = document.getElementById('form-status');
-      el.textContent = msg;
-      el.className = 'form-status ' + type;
-      el.style.display = 'block';
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    function hideStatus() {
-      const el = document.getElementById('form-status');
-      el.style.display = 'none';
-    }
-
-    // ── Confirmed banner ───────────────────────────────────
-    if (window.location.search.includes('confirmed=1')) {
-      document.getElementById('confirmed-banner').style.display = 'block';
-    }
   </script>
 
 </body>
