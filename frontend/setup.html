@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set up your alerts — When To Look</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="nebula" aria-hidden="true"></div>
+  <div class="stars-layer" aria-hidden="true"></div>
+  <div class="stars-large" aria-hidden="true"></div>
+  <div class="stars-micro" aria-hidden="true"></div>
+
+  <div class="setup-card">
+
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Almost done.</h1>
+    <p>Tell us where you are so we know what's visible from your sky.</p>
+
+    <form id="setup-form" novalidate>
+
+      <!-- Hidden fields populated by JS -->
+      <input type="hidden" id="email" name="email">
+      <input type="hidden" id="lat" name="latitude">
+      <input type="hidden" id="lng" name="longitude">
+      <input type="hidden" id="timezone" name="timezone">
+      <input type="hidden" id="location-name" name="location_name">
+
+      <!-- Location -->
+      <span class="form-label-heading">Your location</span>
+      <div class="location-row">
+        <button type="button" id="detect-location" class="btn-detect">
+          📍 Use my location
+        </button>
+        <span class="or-divider">or</span>
+        <input
+          type="text"
+          id="city-input"
+          class="city-input"
+          placeholder="City, country (e.g. Seattle, US)"
+          autocomplete="off"
+          aria-label="Enter your city"
+        >
+      </div>
+      <div id="location-status" class="location-status" role="status" aria-live="polite"></div>
+
+      <!-- Event preferences -->
+      <span class="form-label-heading">What do you want alerts for?</span>
+      <div class="checkbox-grid" role="group" aria-label="Event types">
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="iss" checked>
+          <div class="checkbox-label">
+            <strong>🛰️ ISS Passes</strong>
+            <span>Space Station visible overhead</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="starlink" checked>
+          <div class="checkbox-label">
+            <strong>✨ Starlink Trains</strong>
+            <span>Newly-launched satellites in formation</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="meteor" checked>
+          <div class="checkbox-label">
+            <strong>🌠 Meteor Showers</strong>
+            <span>Peak nights for shooting stars</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="fullmoon" checked>
+          <div class="checkbox-label">
+            <strong>🌕 Full Moons &amp; Supermoons</strong>
+            <span>Including traditional moon names</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="lunar_eclipse" checked>
+          <div class="checkbox-label">
+            <strong>🌑 Lunar Eclipses</strong>
+            <span>Earth's shadow turns the Moon red</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="solar_eclipse" checked>
+          <div class="checkbox-label">
+            <strong>🌗 Solar Eclipses</strong>
+            <span>When the Moon blocks the Sun</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="aurora" checked>
+          <div class="checkbox-label">
+            <strong>🌌 Aurora / Northern Lights</strong>
+            <span>Real-time geomagnetic storm alerts</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="asteroid" checked>
+          <div class="checkbox-label">
+            <strong>☄️ Asteroid Close Approaches</strong>
+            <span>Notable space rocks flying by</span>
+          </div>
+        </label>
+
+      </div>
+
+      <div id="form-error" style="color:#f87171;font-size:0.85rem;margin-bottom:12px;display:none;" role="alert"></div>
+
+      <button type="submit" class="btn-submit" id="submit-btn">Start watching &rarr;</button>
+
+      <p class="fine-print">
+        We'll send a confirmation email before anything else.<br>
+        Unsubscribe any time with one click.
+      </p>
+
+    </form>
+  </div>
+
+  <script>
+    const API_BASE = 'https://whentolook-api.link7373.workers.dev';
+
+    // Pre-fill email from URL param
+    const params = new URLSearchParams(location.search);
+    const emailVal = params.get('email') || '';
+    document.getElementById('email').value = emailVal;
+
+    // ── Geolocation ──────────────────────────────────────────────────────────
+    const detectBtn     = document.getElementById('detect-location');
+    const locationStatus = document.getElementById('location-status');
+    const cityInput     = document.getElementById('city-input');
+
+    detectBtn.addEventListener('click', function() {
+      if (!navigator.geolocation) {
+        setStatus('Geolocation is not supported by your browser.', 'error');
+        return;
+      }
+      setStatus('Detecting your location…', '');
+      navigator.geolocation.getCurrentPosition(
+        async function(pos) {
+          const { latitude, longitude } = pos.coords;
+          setCoords(latitude, longitude);
+          try {
+            const res = await fetch(
+              'https://nominatim.openstreetmap.org/reverse?lat=' + latitude +
+              '&lon=' + longitude + '&format=json'
+            );
+            const data = await res.json();
+            const addr = data.address || {};
+            const city = addr.city || addr.town || addr.village || addr.county || addr.state || 'Your location';
+            const country = addr.country_code ? addr.country_code.toUpperCase() : '';
+            const name = city + (country ? ', ' + country : '');
+            document.getElementById('location-name').value = name;
+            cityInput.value = name;
+            setStatus('📍 ' + name, 'success');
+          } catch (e) {
+            setStatus('📍 Location detected', 'success');
+          }
+        },
+        function() {
+          setStatus('Could not detect location — try typing your city below.', 'error');
+        }
+      );
+    });
+
+    cityInput.addEventListener('change', async function() {
+      const q = cityInput.value.trim();
+      if (!q) return;
+      setStatus('Looking up location…', '');
+      try {
+        const res = await fetch(
+          'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) +
+          '&format=json&limit=1'
+        );
+        const results = await res.json();
+        const place = results[0];
+        if (place) {
+          setCoords(parseFloat(place.lat), parseFloat(place.lon));
+          const name = place.display_name.split(',').slice(0, 2).join(',').trim();
+          document.getElementById('location-name').value = name;
+          setStatus('📍 ' + name, 'success');
+        } else {
+          setStatus('Location not found — try a nearby city.', 'error');
+        }
+      } catch (e) {
+        setStatus('Location lookup failed — check your connection.', 'error');
+      }
+    });
+
+    function setCoords(lat, lng) {
+      document.getElementById('lat').value = lat;
+      document.getElementById('lng').value = lng;
+      document.getElementById('timezone').value =
+        Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+
+    function setStatus(msg, type) {
+      locationStatus.textContent = msg;
+      locationStatus.className = 'location-status' + (type ? ' ' + type : '');
+    }
+
+    // ── Form submit ───────────────────────────────────────────────────────────
+    document.getElementById('setup-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const errorEl = document.getElementById('form-error');
+      const btn     = document.getElementById('submit-btn');
+
+      const email   = document.getElementById('email').value;
+      const lat     = document.getElementById('lat').value;
+      const lng     = document.getElementById('lng').value;
+      const tz      = document.getElementById('timezone').value;
+      const locName = document.getElementById('location-name').value;
+      const prefs   = Array.from(
+        document.querySelectorAll('input[name="event_type"]:checked')
+      ).map(function(cb) { return cb.value; });
+
+      errorEl.style.display = 'none';
+
+      if (!email) {
+        showError('No email found — please go back and enter your email address.');
+        return;
+      }
+      if (!lat || !lng) {
+        showError('Please set your location before continuing.');
+        return;
+      }
+      if (prefs.length === 0) {
+        showError('Please select at least one event type.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Setting up…';
+
+      try {
+        const res = await fetch(API_BASE + '/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email,
+            latitude: parseFloat(lat),
+            longitude: parseFloat(lng),
+            timezone: tz,
+            location_name: locName,
+            preferences: prefs,
+          }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Server error');
+        }
+
+        window.location.href = '/?confirmed=1';
+
+      } catch (err) {
+        showError('Something went wrong — please try again. (' + err.message + ')');
+        btn.disabled = false;
+        btn.textContent = 'Start watching →';
+      }
+
+      function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.style.display = 'block';
+      }
+    });
+  </script>
+
+</body>
+</html>
