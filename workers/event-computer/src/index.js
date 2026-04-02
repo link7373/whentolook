@@ -3,7 +3,6 @@ import { computeMeteorEvents } from './events/meteors.js';
 import { computeIssEvents } from './events/iss.js';
 import { computeFullMoonEvents } from './events/fullmoons.js';
 import { computeEclipseEvents } from './events/eclipses.js';
-import { computeAsteroidEvents } from './events/asteroids.js';
 import { computeStarlinkEvents } from './events/starlink.js';
 
 export default {
@@ -79,11 +78,6 @@ async function processSubscriber(subscriber, types, now, env) {
         allEvents.push(evt);
       }
     }
-  }
-
-  if (types.includes('asteroid')) {
-    const asteroidEvents = await computeAsteroidEvents(subscriber, now, env.DB);
-    allEvents.push(...asteroidEvents);
   }
 
   if (types.includes('starlink')) {
