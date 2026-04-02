@@ -49,9 +49,11 @@ async function handleUpdatePreferences(request, env) {
     `).bind(sub.id, type, preferences[type] ? 1 : 0).run();
   }
 
-  await env.DB.prepare(
-    'UPDATE subscribers SET suppress_if_cloudy = ? WHERE id = ?'
-  ).bind(suppress_if_cloudy ? 1 : 0, sub.id).run();
+  if (suppress_if_cloudy !== undefined) {
+    await env.DB.prepare(
+      'UPDATE subscribers SET suppress_if_cloudy = ? WHERE id = ?'
+    ).bind(suppress_if_cloudy ? 1 : 0, sub.id).run();
+  }
 
   return json({ success: true });
 }
