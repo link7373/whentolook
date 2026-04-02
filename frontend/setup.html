@@ -110,15 +110,17 @@
           </div>
         </label>
 
-        <label class="checkbox-item">
-          <input type="checkbox" name="event_type" value="asteroid" checked>
-          <div class="checkbox-label">
-            <strong>☄️ Asteroid Close Approaches</strong>
-            <span>Notable space rocks flying by</span>
-          </div>
-        </label>
-
       </div>
+
+      <!-- Weather suppression option -->
+      <span class="form-label-heading" style="margin-top:20px;">Notification options</span>
+      <label class="checkbox-item" style="max-width:100%;">
+        <input type="checkbox" id="suppress-if-cloudy" name="suppress_if_cloudy">
+        <div class="checkbox-label">
+          <strong>☁️ Skip alerts if the sky is overcast</strong>
+          <span>We'll check the weather forecast before sending — if cloud cover is over 80%, we'll hold the notification</span>
+        </div>
+      </label>
 
       <div id="form-error" style="color:#f87171;font-size:0.85rem;margin-bottom:12px;display:none;" role="alert"></div>
 
@@ -133,7 +135,7 @@
   </div>
 
   <script>
-    const API_BASE = 'https://whentolook-api.link7373.workers.dev';
+    const API_BASE = 'https://api.whentolook.com';
 
     // Pre-fill email from URL param
     const params = new URLSearchParams(location.search);
@@ -258,6 +260,7 @@
             timezone: tz,
             location_name: locName,
             preferences: prefs,
+            suppress_if_cloudy: document.getElementById('suppress-if-cloudy').checked,
           }),
         });
 

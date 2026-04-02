@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage preferences — When To Look</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="nebula" aria-hidden="true"></div>
+  <div class="stars-layer" aria-hidden="true"></div>
+  <div class="stars-large" aria-hidden="true"></div>
+  <div class="stars-micro" aria-hidden="true"></div>
+
+  <!-- Loading state -->
+  <div class="setup-card" id="state-loading">
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Loading&hellip;</h1>
+    <p>Loading your preferences&hellip;</p>
+  </div>
+
+  <!-- Loaded / form state -->
+  <div class="setup-card" id="state-form" hidden>
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Your alerts</h1>
+    <p>Choose which sky events you want to be notified about.</p>
+
+    <form id="prefs-form" novalidate>
+
+      <span class="form-label-heading">What do you want alerts for?</span>
+      <div class="checkbox-grid" role="group" aria-label="Event types">
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="iss">
+          <div class="checkbox-label">
+            <strong>🛰️ ISS Passes</strong>
+            <span>Space Station visible overhead</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="starlink">
+          <div class="checkbox-label">
+            <strong>✨ Starlink Trains</strong>
+            <span>Newly-launched satellites in formation</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="meteor">
+          <div class="checkbox-label">
+            <strong>🌠 Meteor Showers</strong>
+            <span>Peak nights for shooting stars</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="fullmoon">
+          <div class="checkbox-label">
+            <strong>🌕 Full Moons &amp; Supermoons</strong>
+            <span>Including traditional moon names</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="lunar_eclipse">
+          <div class="checkbox-label">
+            <strong>🌑 Lunar Eclipses</strong>
+            <span>Earth's shadow turns the Moon red</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="solar_eclipse">
+          <div class="checkbox-label">
+            <strong>🌗 Solar Eclipses</strong>
+            <span>When the Moon blocks the Sun</span>
+          </div>
+        </label>
+
+        <label class="checkbox-item">
+          <input type="checkbox" name="event_type" value="aurora">
+          <div class="checkbox-label">
+            <strong>🌌 Aurora / Northern Lights</strong>
+            <span>Real-time geomagnetic storm alerts</span>
+          </div>
+        </label>
+
+      </div>
+
+      <!-- Weather suppression option -->
+      <span class="form-label-heading" style="margin-top:20px;">Notification options</span>
+      <label class="checkbox-item" style="max-width:100%;">
+        <input type="checkbox" id="suppress-if-cloudy" name="suppress_if_cloudy">
+        <div class="checkbox-label">
+          <strong>☁️ Skip alerts if the sky is overcast</strong>
+          <span>We'll check the weather forecast before sending — if cloud cover is over 80%, we'll hold the notification</span>
+        </div>
+      </label>
+
+      <div id="form-error" style="color:#f87171;font-size:0.85rem;margin-bottom:12px;display:none;" role="alert"></div>
+
+      <button type="submit" class="btn-submit" id="save-btn">Save preferences &rarr;</button>
+
+      <p class="fine-print">
+        Unsubscribe any time with one click from any email we send.
+      </p>
+
+    </form>
+  </div>
+
+  <!-- Invalid token state -->
+  <div class="setup-card" id="state-invalid" hidden>
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Link expired</h1>
+    <p>This link has expired or is invalid.</p>
+    <p class="fine-print">
+      You can find a fresh preferences link in any notification email we've sent you.
+      <br><br>
+      <a href="/" style="color:#D4A853;">Back to whentolook.com &rarr;</a>
+    </p>
+  </div>
+
+  <!-- Saved state -->
+  <div class="setup-card" id="state-saved" hidden>
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Preferences updated.</h1>
+    <p>We've saved your changes. We'll only send you alerts for the events you selected.</p>
+    <p class="fine-print">
+      <a href="/" style="color:#D4A853;">Back to whentolook.com &rarr;</a>
+    </p>
+  </div>
+
+  <!-- Error state -->
+  <div class="setup-card" id="state-error" hidden>
+    <span class="hero-eyebrow">When To Look</span>
+    <h1>Something went wrong.</h1>
+    <p>We couldn't save your preferences. Please try again in a moment.</p>
+    <p class="fine-print">
+      If this keeps happening, email us at
+      <a href="mailto:hello@whentolook.com" style="color:#D4A853;">hello@whentolook.com</a>.
+      <br><br>
+      <a href="/" style="color:#D4A853;">Back to whentolook.com &rarr;</a>
+    </p>
+  </div>
+
+  <script>
+    const API_BASE = 'https://api.whentolook.com';
+    const EVENT_TYPES = ['iss', 'starlink', 'meteor', 'fullmoon', 'lunar_eclipse', 'solar_eclipse', 'aurora'];
+
+    // Read token from URL
+    const token = new URLSearchParams(location.search).get('token') || '';
+
+    // ── State helpers ─────────────────────────────────────────────────────────
+    function showState(id) {
+      ['state-loading', 'state-form', 'state-invalid', 'state-saved', 'state-error'].forEach(function(s) {
+        document.getElementById(s).hidden = (s !== id);
+      });
+    }
+
+    // ── Load preferences ──────────────────────────────────────────────────────
+    async function loadPreferences() {
+      if (!token) {
+        showState('state-invalid');
+        return;
+      }
+
+      try {
+        const res = await fetch(API_BASE + '/preferences?token=' + encodeURIComponent(token));
+
+        if (res.status === 401 || res.status === 404) {
+          showState('state-invalid');
+          return;
+        }
+        if (!res.ok) {
+          throw new Error('Server error ' + res.status);
+        }
+
+        const data = await res.json();
+        const prefs = data.preferences || {};
+
+        // Populate checkboxes
+        EVENT_TYPES.forEach(function(type) {
+          var cb = document.querySelector('input[name="event_type"][value="' + type + '"]');
+          if (cb) {
+            cb.checked = prefs[type] !== false; // default to checked if unspecified
+          }
+        });
+
+        // Load weather suppression preference
+        const weatherCb = document.getElementById('suppress-if-cloudy');
+        if (weatherCb) weatherCb.checked = data.suppress_if_cloudy === true;
+
+        showState('state-form');
+
+      } catch (err) {
+        // Network failure or unexpected error on load — show generic error
+        showState('state-error');
+      }
+    }
+
+    // ── Save preferences ──────────────────────────────────────────────────────
+    document.getElementById('prefs-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      var errorEl = document.getElementById('form-error');
+      var btn = document.getElementById('save-btn');
+
+      errorEl.style.display = 'none';
+
+      // Build preferences object
+      var prefs = {};
+      EVENT_TYPES.forEach(function(type) {
+        var cb = document.querySelector('input[name="event_type"][value="' + type + '"]');
+        prefs[type] = cb ? cb.checked : false;
+      });
+
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        var res = await fetch(API_BASE + '/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: token,
+            preferences: prefs,
+            suppress_if_cloudy: document.getElementById('suppress-if-cloudy').checked,
+          }),
+        });
+
+        if (res.status === 401 || res.status === 404) {
+          showState('state-invalid');
+          return;
+        }
+        if (!res.ok) {
+          var text = await res.text();
+          throw new Error(text || 'Server error');
+        }
+
+        showState('state-saved');
+
+      } catch (err) {
+        errorEl.textContent = 'Could not save — please try again. (' + err.message + ')';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Save preferences →';
+      }
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    loadPreferences();
+  </script>
+
+</body>
+</html>
