@@ -2,30 +2,21 @@
 // Channel-agnostic notification dispatch.
 // Currently routes to email only. Adding SMS later means adding a branch here.
 
-export async function notify(subscriber, event, resendApiKey) {
+import { sendEmail } from './aws-ses.js';
+
+export async function notify(subscriber, event, { awsAccessKeyId, awsSecretAccessKey }) {
   const { html, subject } = renderTemplate(event);
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'When To Look <hello@resend.dev>', // TODO: switch to hello@whentolook.com once AWS SES is set up
-      to: subscriber.email,
-      subject,
-      html,
-    }),
+  const messageId = await sendEmail({
+    to: subscriber.email,
+    from: 'When To Look <hello@whentolook.com>',
+    subject,
+    html,
+    accessKeyId: awsAccessKeyId,
+    secretAccessKey: awsSecretAccessKey,
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend error ${res.status}: ${body}`);
-  }
-
-  const data = await res.json();
-  return data.id; // Resend message ID
+  return messageId;
 }
 
 function renderTemplate(event) {
@@ -35,7 +26,6 @@ function renderTemplate(event) {
     fullmoon: renderFullMoon,
     lunar_eclipse: renderLunarEclipse,
     solar_eclipse: renderSolarEclipse,
-    asteroid: renderAsteroid,
     starlink: renderStarlink,
   };
 
@@ -46,13 +36,32 @@ function renderTemplate(event) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared layout helper
-// Wraps content in the light-theme table structure. All color values are
-// inlined so Gmail and Outlook render them correctly regardless of whether
-// they strip the <style> block.
+// Shared layout helpers
 // ---------------------------------------------------------------------------
 
-function emailWrapper({ title, subtitle, bodyHtml, unsubscribeToken }) {
+// 2×2 stat block — the first thing people see when they open the email.
+// stats: array of exactly 4 { label, value } objects.
+function statsBlock(stats) {
+  const cell = (s, borderRight, borderTop) => `
+    <td width="50%" style="padding:20px 24px;${borderRight ? 'border-right:1px solid rgba(255,255,255,0.12);' : ''}${borderTop ? 'border-top:1px solid rgba(255,255,255,0.12);' : ''}vertical-align:top;">
+      <p style="margin:0 0 5px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;font-weight:600;">${s.label}</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:#D4A853;line-height:1.25;">${s.value}</p>
+    </td>`;
+
+  return `
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0F1A;border-radius:8px;margin:0 0 28px;overflow:hidden;">
+    <tr>
+      ${cell(stats[0], true, false)}
+      ${cell(stats[1], false, false)}
+    </tr>
+    <tr>
+      ${cell(stats[2], true, true)}
+      ${cell(stats[3], false, true)}
+    </tr>
+  </table>`;
+}
+
+function emailWrapper({ title, subtitle, statsHtml, bodyHtml, unsubscribeToken }) {
   const footer = `
     <tr>
       <td style="padding:0 40px 36px;">
@@ -93,10 +102,11 @@ function emailWrapper({ title, subtitle, bodyHtml, unsubscribeToken }) {
         </tr>
         <!-- Header / title -->
         <tr>
-          <td class="content-cell" style="padding:36px 40px 28px;">
+          <td class="content-cell" style="padding:36px 40px 32px;">
             <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">When To Look</p>
             <h1 style="margin:8px 0 6px;font-size:26px;font-weight:700;color:#1a1f2e;line-height:1.3;">${title}</h1>
-            <p style="margin:0 0 28px;font-size:14px;color:#D4A853;font-weight:500;">${subtitle}</p>
+            <p style="margin:0 0 28px;font-size:14px;color:#6B7280;">${subtitle}</p>
+            ${statsHtml}
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;">
             ${bodyHtml}
           </td>
@@ -111,11 +121,45 @@ function emailWrapper({ title, subtitle, bodyHtml, unsubscribeToken }) {
 </html>`;
 }
 
-// Renders a single content section with a bold label.
+// Renders a supporting detail section.
 function section(label, content) {
-  return `<p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
+  return `<p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
     <strong style="color:#1a1f2e;">${label}:</strong> ${content}
   </p>`;
+}
+
+// Expands compass abbreviation to full words (e.g. "NNE" → "North-northeast")
+function compassFull(az) {
+  const map = {
+    N: 'North', NNE: 'North-northeast', NE: 'Northeast', ENE: 'East-northeast',
+    E: 'East',  ESE: 'East-southeast', SE: 'Southeast', SSE: 'South-southeast',
+    S: 'South', SSW: 'South-southwest', SW: 'Southwest', WSW: 'West-southwest',
+    W: 'West',  WNW: 'West-northwest', NW: 'Northwest', NNW: 'North-northwest',
+  };
+  return map[az] || az;
+}
+
+// Converts elevation in degrees to a human-readable height description
+function elevDesc(deg) {
+  if (deg >= 85) return 'straight up';
+  if (deg >= 60) return 'high overhead';
+  if (deg >= 40) return 'halfway up';
+  if (deg >= 20) return 'low in the sky';
+  return 'near the horizon';
+}
+
+// Formats a UTC ISO string to local time (e.g. "9:42 PM")
+function localTime(utcIso, timezone) {
+  try {
+    return new Date(utcIso).toLocaleTimeString('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return utcIso.slice(11, 16) + ' UTC';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -126,19 +170,26 @@ function renderMeteor(data) {
   const suburbanLow  = Math.round(data.zhr / 3);
   const suburbanHigh = Math.round(data.zhr / 2);
 
+  const stats = statsBlock([
+    { label: 'When',        value: 'Tonight' },
+    { label: 'Where to look', value: 'Straight up' },
+    { label: 'Rate',        value: `Up to ${data.zhr}/hr` },
+    { label: 'Best time',   value: 'Midnight to dawn' },
+  ]);
+
   const bodyHtml = [
-    section('Where to look', `Lie flat and look straight up. Meteors will appear all across the sky, radiating from ${data.radiant_constellation}. You don't need to stare at that spot — the longest streaks appear 30–45° away from it.`),
     section('What to expect', `Up to ${data.zhr} meteors per hour under ideal dark-sky conditions. From a suburban location, expect around ${suburbanLow}–${suburbanHigh} per hour.`),
-    section('Best viewing time', 'Peak activity is usually between midnight and dawn. Give your eyes 20 minutes to adjust to the dark.'),
-    section('What you\'re seeing', `Each streak is a ${data.particle_size || 'grain-of-sand'}-sized particle from ${data.parent_object} hitting Earth's atmosphere at ${data.velocity_kms} km/s and burning up 60–100 km above your head.`),
-    section('Gear', 'None needed. Just your eyes, a blanket, and patience.'),
+    section('How to watch', `Lie flat and look straight up. Meteors radiate from ${data.radiant_constellation} but appear all across the sky — the longest streaks show up 30–45° away from that point. Give your eyes 20 minutes to adjust.`),
+    section('What you\'re seeing', `Each streak is a ${data.particle_size || 'grain-of-sand'}-sized particle from ${data.parent_object} hitting Earth's atmosphere at ${data.velocity_kms} km/s, burning up 60–100 km above your head.`),
+    section('Gear', 'None. Just your eyes, a blanket, and patience.'),
   ].join('\n');
 
   return {
     subject: `🌠 ${data.name} meteor shower peaks tonight`,
     html: emailWrapper({
       title: `${data.name} Meteor Shower`,
-      subtitle: `Peaks tonight — up to ${data.zhr} meteors per hour`,
+      subtitle: `Peaks tonight`,
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
@@ -147,22 +198,30 @@ function renderMeteor(data) {
 
 function renderIss(data) {
   const durationMins = Math.round(data.duration_seconds / 60);
-  const elevLabel = data.max_elevation >= 60 ? 'very bright, high arc'
-    : data.max_elevation >= 45 ? 'bright pass'
-    : 'good pass';
+  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~30 min';
+  const elevLabel = data.max_elevation >= 60 ? 'Very high arc'
+    : data.max_elevation >= 45 ? 'High arc'
+    : 'Good pass';
+
+  const stats = statsBlock([
+    { label: 'Visible at',   value: timeStr },
+    { label: 'Where to look', value: `${compassFull(data.start_az_compass)}, ${elevDesc(data.max_elevation)}` },
+    { label: 'Visible for',  value: `${durationMins} min` },
+    { label: 'Max height',   value: `${data.max_elevation}°` },
+  ]);
 
   const bodyHtml = [
-    section('Where to look', `Face <strong style="color:#1a1f2e;">${data.start_az_compass}</strong> and watch for a bright, steady light moving smoothly toward the ${data.end_az_compass}. No blinking — that's how you know it's not a plane.`),
-    section('How long', `Visible for about ${durationMins} minute${durationMins !== 1 ? 's' : ''}, climbing to ${data.max_elevation}° above the horizon at its peak.`),
-    section('What you\'re seeing', 'A structure the size of a football field, orbiting 250 miles above your head at 17,500 mph. There are astronauts living and working up there right now.'),
-    section('Tip', 'It moves fast — once you spot it, it crosses the sky in just a few minutes. Watch for it to fade as it enters Earth\'s shadow.'),
+    section('What to look for', `A bright, steady light moving smoothly across the sky — no blinking. Face ${data.start_az_compass} and watch it arc toward the ${data.end_az_compass}. It moves noticeably fast.`),
+    section('What you\'re seeing', 'The International Space Station — a structure the size of a football field, orbiting 250 miles up at 17,500 mph. Astronauts are living and working up there right now.'),
+    section('Tip', 'Once you spot it, track it across the sky. Watch for it to fade as it enters Earth\'s shadow — it doesn\'t set, it just disappears.'),
   ].join('\n');
 
   return {
-    subject: `🛰️ Space Station visible in 30 minutes — look ${data.start_az_compass}`,
+    subject: `🛰️ Space Station passes over in 30 minutes — look ${data.start_az_compass}`,
     html: emailWrapper({
       title: 'International Space Station',
-      subtitle: `Visible overhead in 30 minutes — ${elevLabel}`,
+      subtitle: 'Passing overhead in 30 minutes',
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
@@ -170,26 +229,32 @@ function renderIss(data) {
 }
 
 function renderFullMoon(data) {
-  const supermoonNote = data.supermoon
-    ? ' — and it\'s a Supermoon, appearing about 14% larger and 30% brighter than average'
-    : '';
+  const typeLabel = data.supermoon ? 'Supermoon' : 'Full Moon';
+
+  const stats = statsBlock([
+    { label: 'Tonight',      value: `Full ${data.name}` },
+    { label: 'Look',         value: 'East at moonrise' },
+    { label: 'Type',         value: typeLabel },
+    { label: 'Visible',      value: 'All night' },
+  ]);
 
   const supermoonSection = data.supermoon
     ? section('Why it\'s a Supermoon', 'The Moon\'s orbit is slightly elliptical. Tonight it\'s near its closest point to Earth (perigee), making it appear about 14% larger and 30% brighter than a typical full moon.')
     : '';
 
   const bodyHtml = [
-    section('What to watch for', 'Look for it right at moonrise, when it\'s near the horizon — that\'s when the "Moon illusion" makes it look enormous. It\'ll seem to shrink as it climbs higher, even though its actual size hasn\'t changed.'),
+    section('Best moment to watch', 'Look for it right at moonrise, when it\'s near the horizon — that\'s when the "Moon illusion" makes it look enormous. It\'ll seem to shrink as it climbs higher, even though its actual size hasn\'t changed.'),
     supermoonSection,
-    section('The name', `${data.name_origin}.`),
-    section('No gear needed', 'Just step outside. The full moon is bright enough to cast shadows.'),
+    section('The name', data.name_origin + '.'),
+    section('No gear needed', 'The full moon is bright enough to cast shadows.'),
   ].join('\n');
 
   return {
     subject: `🌕 Full ${data.name} rises tonight${data.supermoon ? ' — Supermoon' : ''}`,
     html: emailWrapper({
       title: `Full ${data.name}`,
-      subtitle: `Rising tonight${supermoonNote}`,
+      subtitle: data.supermoon ? 'Supermoon tonight' : 'Full moon tonight',
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
@@ -202,28 +267,47 @@ function renderLunarEclipse(data) {
     : data.type === 'partial' ? 'Partial Lunar Eclipse'
     : 'Penumbral Lunar Eclipse';
 
+  const startsAt = data.partial_start
+    ? new Date(data.partial_start).toUTCString().slice(17, 22) + ' UTC'
+    : data.maximum
+    ? new Date(data.maximum).toUTCString().slice(17, 22) + ' UTC'
+    : 'Tonight';
+
+  const peakAt = data.maximum
+    ? new Date(data.maximum).toUTCString().slice(17, 22) + ' UTC'
+    : '—';
+
+  const safeLabel = data.type === 'solar' ? '⚠️ Glasses required' : 'Safe — naked eye';
+
+  const stats = statsBlock([
+    { label: 'Eclipse begins', value: startsAt },
+    { label: 'Peak',           value: peakAt },
+    { label: 'Type',           value: typeLabel },
+    { label: 'Eye safety',     value: safeLabel },
+  ]);
+
   const whatYoullSee = data.type === 'total'
-    ? 'The Moon will turn a deep copper or blood red as Earth\'s shadow covers it completely. It\'s one of the most striking things you can see with the naked eye.'
+    ? 'The Moon will turn a deep copper or blood red as Earth\'s shadow covers it completely — one of the most striking things you can see with the naked eye.'
     : data.type === 'partial'
     ? 'You\'ll see Earth\'s curved shadow slowly creeping across the Moon\'s surface — a visible reminder that Earth is a sphere.'
     : 'A subtle darkening on one side of the Moon. This one\'s understated — look carefully.';
 
-  const timelineRows = data.partial_start ? `
-    ${data.partial_start ? `Partial eclipse begins: ${new Date(data.partial_start).toUTCString().slice(17, 22)} UTC<br>` : ''}
-    ${data.total_start   ? `Totality begins: ${new Date(data.total_start).toUTCString().slice(17, 22)} UTC<br>` : ''}
-    Maximum: ${new Date(data.maximum).toUTCString().slice(17, 22)} UTC<br>
-    ${data.total_end   ? `Totality ends: ${new Date(data.total_end).toUTCString().slice(17, 22)} UTC<br>` : ''}
-    ${data.partial_end ? `Partial eclipse ends: ${new Date(data.partial_end).toUTCString().slice(17, 22)} UTC` : ''}
-  ` : '';
+  const timelineRows = [
+    data.partial_start ? `Partial eclipse begins: ${new Date(data.partial_start).toUTCString().slice(17, 22)} UTC` : '',
+    data.total_start   ? `Totality begins: ${new Date(data.total_start).toUTCString().slice(17, 22)} UTC` : '',
+    data.maximum       ? `Maximum: ${new Date(data.maximum).toUTCString().slice(17, 22)} UTC` : '',
+    data.total_end     ? `Totality ends: ${new Date(data.total_end).toUTCString().slice(17, 22)} UTC` : '',
+    data.partial_end   ? `Partial eclipse ends: ${new Date(data.partial_end).toUTCString().slice(17, 22)} UTC` : '',
+  ].filter(Boolean).join('<br>');
 
-  const timelineSection = data.partial_start
-    ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.9;color:#4B5563;"><strong style="color:#1a1f2e;">Timeline (UTC):</strong><br>${timelineRows}</p>`
+  const timelineSection = timelineRows
+    ? `<p style="margin:0 0 18px;font-size:14px;line-height:1.9;color:#4B5563;"><strong style="color:#1a1f2e;">Timeline (UTC):</strong><br>${timelineRows}</p>`
     : '';
 
   const bodyHtml = [
     section('What you\'ll see', whatYoullSee),
     timelineSection,
-    section('Safe to watch', 'Unlike a solar eclipse, a lunar eclipse is completely safe to observe with your naked eyes. No equipment needed.'),
+    section('Safe to watch', 'Unlike a solar eclipse, a lunar eclipse is completely safe to observe with your naked eyes. No equipment needed — though binoculars show beautiful detail.'),
   ].join('\n');
 
   return {
@@ -233,6 +317,7 @@ function renderLunarEclipse(data) {
     html: emailWrapper({
       title: typeLabel,
       subtitle: isReminder ? 'Tomorrow night — plan ahead' : 'Visible tonight from your area',
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
@@ -240,10 +325,16 @@ function renderLunarEclipse(data) {
 }
 
 function renderSolarEclipse(data) {
-  // Safety warning gets a distinct red-tinted box, per design spec.
-  const safetyBox = `<div style="background:#FEF2F2;border-left:3px solid #EF4444;padding:14px 18px;border-radius:4px;margin-bottom:20px;font-size:15px;line-height:1.6;color:#1a1f2e;">
+  const safetyBox = `<div style="background:#FEF2F2;border-left:3px solid #EF4444;padding:14px 18px;border-radius:4px;margin-bottom:20px;font-size:14px;line-height:1.6;color:#1a1f2e;">
     ⚠️ <strong>NEVER look directly at the Sun</strong> without certified eclipse glasses (ISO 12312-2). Regular sunglasses are <strong>NOT</strong> safe.
   </div>`;
+
+  const stats = statsBlock([
+    { label: 'When',         value: 'Today' },
+    { label: 'Type',         value: data.type.charAt(0).toUpperCase() + data.type.slice(1) + ' eclipse' },
+    { label: 'Path',         value: data.path_description },
+    { label: 'Eye safety',   value: '⚠️ Eclipse glasses required' },
+  ]);
 
   const bodyHtml = safetyBox + [
     section('What\'s happening', `The Moon is passing between Earth and the Sun. The path of totality crosses ${data.path_description}.`),
@@ -256,6 +347,7 @@ function renderSolarEclipse(data) {
     html: emailWrapper({
       title: 'Solar Eclipse Today',
       subtitle: `${data.type.charAt(0).toUpperCase() + data.type.slice(1)} eclipse — ${data.path_description}`,
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
@@ -264,45 +356,30 @@ function renderSolarEclipse(data) {
 
 function renderStarlink(data) {
   const durationMins = Math.round(data.duration_seconds / 60);
+  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~30 min';
+
+  const stats = statsBlock([
+    { label: 'Visible at',   value: timeStr },
+    { label: 'Where to look', value: `${compassFull(data.start_az_compass)}, ${elevDesc(data.max_elevation)}` },
+    { label: 'Visible for',  value: `${durationMins} min` },
+    { label: 'Satellites',   value: `~${data.recent_satellite_count} in formation` },
+  ]);
 
   const bodyHtml = [
-    section('Where to look', `Face <strong style="color:#1a1f2e;">${data.start_az_compass}</strong> and watch for a line of bright dots moving in a row across the sky — like a string of pearls. They'll travel toward the ${data.end_az_compass}. Visible for about ${durationMins} minute${durationMins !== 1 ? 's' : ''}.`),
-    section('What they are', `These are ${data.recent_satellite_count} recently-launched SpaceX Starlink internet satellites, still traveling in formation after launch. They'll gradually spread apart and become invisible over the next few weeks.`),
-    section('Fun fact', 'Many people mistake Starlink trains for UFOs. Now you know better — and you can explain it to whoever is standing next to you.'),
-    section('Tip', 'They move fast — have someone with you to point and look simultaneously. The train spans several degrees of sky.'),
+    section('What to look for', `A line of bright dots moving in a row — like a string of pearls crossing the sky. Face ${data.start_az_compass} and watch them arc toward the ${data.end_az_compass}.`),
+    section('What they are', `Newly-launched SpaceX Starlink internet satellites, still traveling in formation. They'll gradually spread apart and become invisible over the next few weeks.`),
+    section('Fun fact', 'Many people mistake Starlink trains for UFOs. Now you know better.'),
   ].join('\n');
 
   return {
     subject: `✨ Starlink satellite train visible in 30 minutes`,
     html: emailWrapper({
       title: 'Starlink Satellite Train',
-      subtitle: `Visible in 30 minutes — look ${data.start_az_compass}`,
+      subtitle: 'Visible in 30 minutes',
+      statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
     }),
   };
 }
 
-function renderAsteroid(data) {
-  const distRounded = Math.round(data.dist_ld * 10) / 10;
-  const sizeDesc = data.diameter_m >= 500 ? 'the size of a skyscraper'
-    : data.diameter_m >= 200 ? 'the size of a city block'
-    : 'the size of a large building';
-
-  const bodyHtml = [
-    section('Size', `Approximately ${sizeDesc}${data.diameter_m ? ` (estimated ${Math.round(data.diameter_m)}m diameter)` : ''}.`),
-    section('Distance', `${distRounded} times the distance from Earth to the Moon — a close pass in astronomical terms, but still hundreds of thousands of kilometres away.`),
-    section('Speed', `Traveling at roughly ${data.v_rel ? Math.round(parseFloat(data.v_rel)) : '~20'} km/s — about 50 times faster than a bullet.`),
-    section('Not a threat', 'NASA tracks thousands of near-Earth objects. This one passes safely. The purpose of this notification is simply — how often do you get to know there\'s a space rock flying by right now?'),
-  ].join('\n');
-
-  return {
-    subject: `☄️ Asteroid ${data.name} is making a close pass by Earth today`,
-    html: emailWrapper({
-      title: `Asteroid ${data.name}`,
-      subtitle: `Close approach today — ${distRounded} lunar distances away`,
-      bodyHtml,
-      unsubscribeToken: data.unsubscribe_token,
-    }),
-  };
-}

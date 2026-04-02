@@ -1,5 +1,6 @@
 // index.js
 import { notify } from './notify.js';
+import { getCloudCover } from './weather.js';
 
 export default {
   // Cron trigger: runs every 5 minutes
@@ -17,29 +18,57 @@ export default {
     }
 
     if (url.pathname === '/test-email') {
-      // Temporary test route — remove after verifying emails send
-      const testEmailAddress = url.searchParams.get('to');
-      if (!testEmailAddress) {
-        return new Response('Missing ?to= param', { status: 400 });
-      }
+      const to = url.searchParams.get('to');
+      const type = url.searchParams.get('type') || 'meteor';
+      if (!to) return new Response('Missing ?to= param', { status: 400 });
+
+      const fixtures = {
+        meteor: {
+          name: 'Perseids', zhr: 100, radiant_constellation: 'Perseus',
+          parent_object: 'Comet Swift-Tuttle', velocity_kms: 59,
+          particle_size: 'grain-of-sand', unsubscribe_token: 'test-token',
+        },
+        iss: {
+          start_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          duration_seconds: 240, max_elevation: 72,
+          start_az_compass: 'SW', end_az_compass: 'NE',
+          timezone: 'America/Vancouver', unsubscribe_token: 'test-token',
+        },
+        fullmoon: {
+          name: 'Harvest Moon', supermoon: true,
+          name_origin: 'Named for the full moon closest to the autumn equinox, when farmers historically used the extra light to harvest crops late into the evening',
+          unsubscribe_token: 'test-token',
+        },
+        lunar_eclipse: {
+          type: 'total',
+          partial_start: '2026-03-03T04:30:00Z', total_start: '2026-03-03T05:41:00Z',
+          maximum: '2026-03-03T06:33:00Z', total_end: '2026-03-03T07:25:00Z',
+          partial_end: '2026-03-03T08:37:00Z', is_reminder: false,
+          unsubscribe_token: 'test-token',
+        },
+        solar_eclipse: {
+          type: 'total', path_description: 'Arctic, Greenland, Iceland, Spain',
+          unsubscribe_token: 'test-token',
+        },
+        starlink: {
+          start_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          duration_seconds: 180, max_elevation: 45,
+          start_az_compass: 'WSW', end_az_compass: 'NNE',
+          recent_satellite_count: 52, timezone: 'America/Vancouver',
+          unsubscribe_token: 'test-token',
+        },
+      };
+
+      const fixture = fixtures[type];
+      if (!fixture) return new Response(`Unknown type. Options: ${Object.keys(fixtures).join(', ')}`, { status: 400 });
+
       try {
         const emailId = await notify(
-          { email: testEmailAddress },
-          {
-            event_type: 'meteor',
-            event_data: JSON.stringify({
-              name: 'Lyrids',
-              zhr: 18,
-              radiant_constellation: 'Lyra',
-              parent_object: 'Comet Thatcher',
-              velocity_kms: 49,
-              particle_size: 'grain-of-sand',
-              unsubscribe_token: 'test-token-preview',
-            }),
-          },
-          env.RESEND_API_KEY
+          { email: to },
+          { event_type: type, event_data: JSON.stringify(fixture) },
+          { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY }
         );
-        return new Response(`✅ Email sent: ${emailId}`, { status: 200 });
+        return new Response(`✅ ${type} email sent: ${emailId}`, { status: 200 });
       } catch (err) {
         return new Response(`❌ Error: ${err.message}`, { status: 500 });
       }
@@ -53,7 +82,8 @@ async function dispatch(env) {
   const now = new Date().toISOString();
 
   const { results } = await env.DB.prepare(`
-    SELECT eq.*, s.email, s.timezone, s.unsubscribe_token
+    SELECT eq.*, s.email, s.timezone, s.unsubscribe_token,
+           s.suppress_if_cloudy, s.latitude, s.longitude
     FROM event_queue eq
     JOIN subscribers s ON s.id = eq.subscriber_id
     WHERE eq.status = 'pending' AND eq.notify_at <= ?
@@ -66,6 +96,18 @@ async function dispatch(env) {
 }
 
 async function processEvent(event, env) {
+  // Weather suppression: skip if subscriber opted in and cloud cover >= 80%
+  if (event.suppress_if_cloudy) {
+    const cover = await getCloudCover(event.latitude, event.longitude, event.notify_at);
+    if (cover !== null && cover >= 80) {
+      await env.DB.prepare(
+        `UPDATE event_queue SET status = 'skipped' WHERE id = ?`
+      ).bind(event.id).run();
+      console.log(`[dispatcher] Skipped ${event.id} (${event.event_type}) — cloud cover ${cover}%`);
+      return;
+    }
+  }
+
   // Inject unsubscribe_token into event_data for template use
   const eventData = JSON.parse(event.event_data);
   eventData.unsubscribe_token = event.unsubscribe_token;
@@ -76,7 +118,7 @@ async function processEvent(event, env) {
     const emailId = await notify(
       { email: event.email },
       enrichedEvent,
-      env.RESEND_API_KEY
+      { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY }
     );
 
     await env.DB.prepare(`
