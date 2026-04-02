@@ -3,6 +3,9 @@
 // If Kp meets the threshold for any subscriber's latitude, sends an immediate alert.
 // Bypasses event_queue for real-time delivery. 12-hour suppression prevents spam.
 
+import { sendEmail } from './aws-ses.js';
+import { getCloudCover } from './weather.js';
+
 // Minimum Kp required to see aurora at a given latitude (absolute value)
 function minKpForLatitude(lat) {
   const absLat = Math.abs(lat);
@@ -33,12 +36,36 @@ async function fetchCurrentKp() {
   return parseFloat(latest[1]);
 }
 
-async function sendAuroraEmail(subscriber, kp, resendApiKey) {
+async function sendAuroraEmail(subscriber, kp, { awsAccessKeyId, awsSecretAccessKey }) {
   const storm = stormLabel(kp);
   const subject = `🌌 Aurora alert — Northern Lights may be visible RIGHT NOW`;
 
+  const statsBlock = `
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0F1A;border-radius:8px;margin:0 0 28px;overflow:hidden;">
+    <tr>
+      <td width="50%" style="padding:20px 24px;border-right:1px solid rgba(255,255,255,0.12);vertical-align:top;">
+        <p style="margin:0 0 5px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;font-weight:600;">When</p>
+        <p style="margin:0;font-size:20px;font-weight:700;color:#D4A853;line-height:1.25;">Right now</p>
+      </td>
+      <td width="50%" style="padding:20px 24px;vertical-align:top;">
+        <p style="margin:0 0 5px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;font-weight:600;">Look</p>
+        <p style="margin:0;font-size:20px;font-weight:700;color:#D4A853;line-height:1.25;">North, near horizon</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 24px;border-right:1px solid rgba(255,255,255,0.12);border-top:1px solid rgba(255,255,255,0.12);vertical-align:top;">
+        <p style="margin:0 0 5px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;font-weight:600;">Kp index</p>
+        <p style="margin:0;font-size:20px;font-weight:700;color:#D4A853;line-height:1.25;">Kp ${kp} — ${storm}</p>
+      </td>
+      <td style="padding:20px 24px;border-top:1px solid rgba(255,255,255,0.12);vertical-align:top;">
+        <p style="margin:0 0 5px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#6B7280;font-weight:600;">Key tip</p>
+        <p style="margin:0;font-size:20px;font-weight:700;color:#D4A853;line-height:1.25;">Get dark skies</p>
+      </td>
+    </tr>
+  </table>`;
+
   const html = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -48,37 +75,31 @@ async function sendAuroraEmail(subscriber, kp, resendApiKey) {
 <tr><td align="center">
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);overflow:hidden;">
   <tr><td style="background:#0B0F1A;height:8px;font-size:0;">&nbsp;</td></tr>
-  <tr><td style="padding:36px 40px;">
+  <tr><td style="padding:36px 40px 32px;">
     <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9CA3AF;font-weight:600;">When To Look</p>
     <h1 style="margin:8px 0 6px;font-size:26px;font-weight:700;color:#1a1f2e;line-height:1.3;">Aurora Alert</h1>
-    <p style="margin:0 0 28px;font-size:14px;color:#D4A853;font-weight:500;">Kp ${kp} — ${storm} — go outside now</p>
+    <p style="margin:0 0 28px;font-size:14px;color:#6B7280;">Northern Lights may be visible from your area now</p>
+    ${statsBlock}
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;">
 
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
-      <strong style="color:#1a1f2e;">Where to look:</strong> Face north. Get away from city lights if you can — even a short drive to a dark spot makes a big difference. Look for a faint green glow on the northern horizon.
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
+      <strong style="color:#1a1f2e;">Where to look:</strong> Face north and get away from city lights — even a short drive to a dark spot makes a big difference. Look for a faint green glow on the northern horizon.
     </p>
-
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
-      <strong style="color:#1a1f2e;">What you might see:</strong> The aurora often starts as a pale green arc or glow. It can intensify into curtains, pillars, or rippling bands of green, purple, and red. It moves and changes in real time.
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
+      <strong style="color:#1a1f2e;">What you might see:</strong> The aurora often starts as a pale green arc. It can intensify into curtains, pillars, and rippling bands of green, purple, and red — moving in real time.
     </p>
-
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
-      <strong style="color:#1a1f2e;">Camera tip:</strong> Your phone camera sees aurora better than your eyes do. Try a 3–10 second exposure pointing north — you may be amazed at what shows up.
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
+      <strong style="color:#1a1f2e;">Camera tip:</strong> Your phone sees aurora better than your eyes. Try a 3–10 second exposure pointing north.
     </p>
-
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
-      <strong style="color:#1a1f2e;">Current conditions:</strong> Kp index is ${kp} (${storm}). Clear skies required — check your local weather before heading out.
-    </p>
-
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4B5563;">
-      <strong style="color:#1a1f2e;">Note:</strong> Aurora activity can fade quickly. This alert fires when Kp reaches your threshold — go out within the next hour for the best chance.
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
+      <strong style="color:#1a1f2e;">Conditions:</strong> Clear skies required. Aurora activity can fade quickly — head out within the next hour for the best chance.
     </p>
 
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 20px;">
     <p style="margin:0;font-size:11px;color:#9CA3AF;text-align:center;line-height:1.8;">
       You're receiving this because you signed up at <a href="https://whentolook.com" style="color:#D4A853;text-decoration:none;">whentolook.com</a><br>
-      <a href="https://whentolook.com/unsubscribe?token=${subscriber.unsubscribe_token}" style="color:#9CA3AF;">Unsubscribe</a> &nbsp;·&nbsp;
-      <a href="https://whentolook.com/preferences?token=${subscriber.unsubscribe_token}" style="color:#9CA3AF;">Manage preferences</a>
+      <a href="https://whentolook.com/unsubscribe?token=${subscriber.unsubscribe_token}" style="color:#9CA3AF;text-decoration:none;">Unsubscribe</a> &nbsp;·&nbsp;
+      <a href="https://whentolook.com/preferences?token=${subscriber.unsubscribe_token}" style="color:#9CA3AF;text-decoration:none;">Manage preferences</a>
     </p>
   </td></tr>
 </table>
@@ -86,27 +107,14 @@ async function sendAuroraEmail(subscriber, kp, resendApiKey) {
 </body>
 </html>`;
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'When To Look <hello@resend.dev>',
-      to: subscriber.email,
-      subject,
-      html,
-    }),
+  return sendEmail({
+    to: subscriber.email,
+    from: 'When To Look <hello@whentolook.com>',
+    subject,
+    html,
+    accessKeyId: awsAccessKeyId,
+    secretAccessKey: awsSecretAccessKey,
   });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend error ${res.status}: ${body}`);
-  }
-
-  const data = await res.json();
-  return data.id;
 }
 
 async function checkAurora(env, kpOverride = null) {
@@ -128,7 +136,7 @@ async function checkAurora(env, kpOverride = null) {
 
   // Fetch all aurora-subscribed, active, confirmed subscribers
   const { results: subscribers } = await env.DB.prepare(`
-    SELECT s.id, s.email, s.latitude, s.timezone, s.unsubscribe_token
+    SELECT s.id, s.email, s.latitude, s.longitude, s.timezone, s.unsubscribe_token, s.suppress_if_cloudy
     FROM subscribers s
     JOIN preferences p ON p.subscriber_id = s.id AND p.event_type = 'aurora' AND p.enabled = 1
     WHERE s.active = 1 AND s.confirmed = 1
@@ -154,9 +162,18 @@ async function checkAurora(env, kpOverride = null) {
       continue;
     }
 
+    // Weather suppression: skip if subscriber opted in and it's cloudy right now
+    if (sub.suppress_if_cloudy) {
+      const cover = await getCloudCover(sub.latitude, sub.longitude, new Date().toISOString());
+      if (cover !== null && cover >= 80) {
+        console.log(`[aurora] Skipped for ${sub.email} — cloud cover ${cover}%`);
+        continue;
+      }
+    }
+
     // Send directly
     try {
-      const emailId = await sendAuroraEmail(sub, currentKp, env.RESEND_API_KEY);
+      const emailId = await sendAuroraEmail(sub, currentKp, { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY });
 
       await env.DB.prepare(`
         INSERT INTO notification_log (id, subscriber_id, event_type, event_id, sent_at, email_id)
