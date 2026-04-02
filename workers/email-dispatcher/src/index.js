@@ -62,6 +62,13 @@ export default {
       const fixture = fixtures[type];
       if (!fixture) return new Response(`Unknown type. Options: ${Object.keys(fixtures).join(', ')}`, { status: 400 });
 
+      // Look up real subscriber so unsubscribe/preferences links in the email work
+      const sub = await env.DB.prepare(
+        'SELECT email, unsubscribe_token FROM subscribers WHERE email = ?'
+      ).bind(to).first();
+      const unsubscribeToken = sub?.unsubscribe_token ?? 'test-token';
+      fixture.unsubscribe_token = unsubscribeToken;
+
       try {
         const emailId = await notify(
           { email: to },
