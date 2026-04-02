@@ -7,7 +7,7 @@ export async function handleSubscribe(request, env) {
     return json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { email, latitude, longitude, location_name, timezone, preferences } = body;
+  const { email, latitude, longitude, location_name, timezone, preferences, suppress_if_cloudy } = body;
 
   if (!email || latitude == null || longitude == null || !timezone) {
     return json({ error: 'Missing required fields: email, latitude, longitude, timezone' }, 400);
@@ -24,18 +24,20 @@ export async function handleSubscribe(request, env) {
   // Upsert subscriber — re-issues confirmation if they sign up again
   try {
     await env.DB.prepare(`
-      INSERT INTO subscribers (id, email, latitude, longitude, location_name, timezone, created_at, confirm_token, unsubscribe_token)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO subscribers (id, email, latitude, longitude, location_name, timezone, created_at, confirm_token, unsubscribe_token, suppress_if_cloudy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
         latitude = excluded.latitude,
         longitude = excluded.longitude,
         location_name = excluded.location_name,
         timezone = excluded.timezone,
         confirm_token = excluded.confirm_token,
+        suppress_if_cloudy = excluded.suppress_if_cloudy,
         active = 1
     `).bind(
       crypto.randomUUID(), email, latitude, longitude,
-      location_name || null, timezone, now, confirmToken, unsubscribeToken
+      location_name || null, timezone, now, confirmToken, unsubscribeToken,
+      suppress_if_cloudy ? 1 : 0
     ).run();
   } catch (err) {
     console.error('DB error on subscribe:', err);
@@ -48,7 +50,7 @@ export async function handleSubscribe(request, env) {
   ).bind(email).first();
 
   // Upsert preferences
-  const allTypes = ['iss', 'starlink', 'meteor', 'fullmoon', 'lunar_eclipse', 'solar_eclipse', 'aurora', 'asteroid'];
+  const allTypes = ['iss', 'starlink', 'meteor', 'fullmoon', 'lunar_eclipse', 'solar_eclipse', 'aurora'];
   const enabled = Array.isArray(preferences) ? preferences : allTypes;
 
   for (const type of allTypes) {
