@@ -101,7 +101,7 @@ async function processEvent(event, env) {
     const cover = await getCloudCover(event.latitude, event.longitude, event.notify_at);
     if (cover !== null && cover >= 80) {
       await env.DB.prepare(
-        `UPDATE event_queue SET status = 'skipped' WHERE id = ?`
+        `UPDATE event_queue SET status = 'skipped_weather' WHERE id = ?`
       ).bind(event.id).run();
       console.log(`[dispatcher] Skipped ${event.id} (${event.event_type}) — cloud cover ${cover}%`);
       return;
