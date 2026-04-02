@@ -164,7 +164,12 @@ async function checkAurora(env, kpOverride = null) {
 
     // Weather suppression: skip if subscriber opted in and it's cloudy right now
     if (sub.suppress_if_cloudy) {
-      const cover = await getCloudCover(sub.latitude, sub.longitude, new Date().toISOString());
+      let cover = null;
+      try {
+        cover = await getCloudCover(sub.latitude, sub.longitude, new Date().toISOString());
+      } catch (err) {
+        console.warn(`[aurora] Weather check failed for ${sub.email}, proceeding:`, err.message);
+      }
       if (cover !== null && cover >= 80) {
         console.log(`[aurora] Skipped for ${sub.email} — cloud cover ${cover}%`);
         continue;
