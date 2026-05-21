@@ -29,7 +29,7 @@ export default {
           particle_size: 'grain-of-sand', unsubscribe_token: 'test-token',
         },
         iss: {
-          start_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          start_utc: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           duration_seconds: 240, max_elevation: 72,
           start_az_compass: 'SW', end_az_compass: 'NE',
           timezone: 'America/Vancouver', unsubscribe_token: 'test-token',
@@ -51,7 +51,7 @@ export default {
           unsubscribe_token: 'test-token',
         },
         starlink: {
-          start_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          start_utc: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           duration_seconds: 180, max_elevation: 45,
           start_az_compass: 'WSW', end_az_compass: 'NNE',
           recent_satellite_count: 52, timezone: 'America/Vancouver',
@@ -73,7 +73,7 @@ export default {
         const emailId = await notify(
           { email: to },
           { event_type: type, event_data: JSON.stringify(fixture) },
-          { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY }
+          { sendgridApiKey: env.SENDGRID_API_KEY }
         );
         return new Response(`✅ ${type} email sent: ${emailId}`, { status: 200 });
       } catch (err) {
@@ -125,7 +125,7 @@ async function processEvent(event, env) {
     const emailId = await notify(
       { email: event.email },
       enrichedEvent,
-      { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY }
+      { sendgridApiKey: env.SENDGRID_API_KEY }
     );
 
     await env.DB.prepare(`

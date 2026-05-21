@@ -2,9 +2,9 @@
 // Channel-agnostic notification dispatch.
 // Currently routes to email only. Adding SMS later means adding a branch here.
 
-import { sendEmail } from './aws-ses.js';
+import { sendEmail } from './resend.js';
 
-export async function notify(subscriber, event, { awsAccessKeyId, awsSecretAccessKey }) {
+export async function notify(subscriber, event, { sendgridApiKey }) {
   const { html, subject } = renderTemplate(event);
 
   const messageId = await sendEmail({
@@ -12,8 +12,7 @@ export async function notify(subscriber, event, { awsAccessKeyId, awsSecretAcces
     from: 'When To Look <hello@whentolook.com>',
     subject,
     html,
-    accessKeyId: awsAccessKeyId,
-    secretAccessKey: awsSecretAccessKey,
+    apiKey: sendgridApiKey,
   });
 
   return messageId;
@@ -198,7 +197,7 @@ function renderMeteor(data) {
 
 function renderIss(data) {
   const durationMins = Math.round(data.duration_seconds / 60);
-  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~30 min';
+  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~1 hour';
   const elevLabel = data.max_elevation >= 60 ? 'Very high arc'
     : data.max_elevation >= 45 ? 'High arc'
     : 'Good pass';
@@ -217,10 +216,10 @@ function renderIss(data) {
   ].join('\n');
 
   return {
-    subject: `🛰️ Space Station passes over in 30 minutes — look ${data.start_az_compass}`,
+    subject: `🛰️ Space Station passes over in 1 hour — look ${data.start_az_compass}`,
     html: emailWrapper({
       title: 'International Space Station',
-      subtitle: 'Passing overhead in 30 minutes',
+      subtitle: 'Passing overhead in 1 hour',
       statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,
@@ -356,7 +355,7 @@ function renderSolarEclipse(data) {
 
 function renderStarlink(data) {
   const durationMins = Math.round(data.duration_seconds / 60);
-  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~30 min';
+  const timeStr = data.start_utc ? localTime(data.start_utc, data.timezone) : 'In ~1 hour';
 
   const stats = statsBlock([
     { label: 'Visible at',   value: timeStr },
@@ -372,10 +371,10 @@ function renderStarlink(data) {
   ].join('\n');
 
   return {
-    subject: `✨ Starlink satellite train visible in 30 minutes`,
+    subject: `✨ Starlink satellite train visible in 1 hour`,
     html: emailWrapper({
       title: 'Starlink Satellite Train',
-      subtitle: 'Visible in 30 minutes',
+      subtitle: 'Visible in 1 hour',
       statsHtml: stats,
       bodyHtml,
       unsubscribeToken: data.unsubscribe_token,

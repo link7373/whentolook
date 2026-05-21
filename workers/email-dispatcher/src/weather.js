@@ -1,10 +1,10 @@
 // weather.js
 // Returns cloud cover percentage (0-100) for the given lat/lon at the UTC hour
-// matching utcIso (e.g. "2026-04-01T09:30:00Z" → checks the 09:00 hour).
-// Returns null on any error — callers MUST fail open (send anyway) on null.
+// matching utcIso (e.g. "2026-04-01T09:30:00Z" checks the 09:00 UTC hour).
+// Returns null on any error -- callers MUST fail open (send anyway) on null.
 export async function getCloudCover(lat, lon, utcIso) {
-  // Open-Meteo returns hourly times as "2026-04-01T09" (no minutes/seconds)
-  const targetHour = utcIso.slice(0, 13); // "2026-04-01T09"
+  // Open-Meteo returns hourly times as "2026-04-01T09:00" -- must match exactly
+  const targetHour = utcIso.slice(0, 13) + ':00'; // e.g. "2026-04-01T09:00"
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast` +

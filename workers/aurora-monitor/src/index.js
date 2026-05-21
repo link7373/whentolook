@@ -3,7 +3,7 @@
 // If Kp meets the threshold for any subscriber's latitude, sends an immediate alert.
 // Bypasses event_queue for real-time delivery. 12-hour suppression prevents spam.
 
-import { sendEmail } from './aws-ses.js';
+import { sendEmail } from './resend.js';
 import { getCloudCover } from './weather.js';
 
 // Minimum Kp required to see aurora at a given latitude (absolute value)
@@ -26,6 +26,41 @@ function stormLabel(kp) {
   return 'G1 Minor storm';
 }
 
+// Returns the Sun's altitude in degrees above the horizon for a given location and time.
+// Accurate to ~1° — sufficient for nighttime detection.
+function solarAltitudeDeg(latDeg, lonDeg, date) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const D = JD - 2451545.0;
+
+  let L = (280.46 + 0.9856474 * D) % 360;
+  if (L < 0) L += 360;
+  let g = (357.528 + 0.9856003 * D) % 360;
+  if (g < 0) g += 360;
+
+  const lambda = L + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g));
+  const eps = 23.439 - 0.0000004 * D;
+
+  const dec = Math.asin(Math.sin(toRad(eps)) * Math.sin(toRad(lambda)));
+
+  let RA = toDeg(Math.atan2(
+    Math.cos(toRad(eps)) * Math.sin(toRad(lambda)),
+    Math.cos(toRad(lambda))
+  ));
+  if (RA < 0) RA += 360;
+
+  const GMST = (280.46061837 + 360.98564736629 * D) % 360;
+  const LST = (GMST + lonDeg + 360) % 360;
+  const HA = (LST - RA + 360) % 360;
+
+  const sinAlt = Math.sin(toRad(latDeg)) * Math.sin(dec) +
+    Math.cos(toRad(latDeg)) * Math.cos(dec) * Math.cos(toRad(HA));
+
+  return toDeg(Math.asin(sinAlt));
+}
+
 async function fetchCurrentKp() {
   const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
   if (!res.ok) throw new Error(`NOAA fetch failed: ${res.status}`);
@@ -36,7 +71,7 @@ async function fetchCurrentKp() {
   return parseFloat(latest[1]);
 }
 
-async function sendAuroraEmail(subscriber, kp, { awsAccessKeyId, awsSecretAccessKey }) {
+async function sendAuroraEmail(subscriber, kp, { sendgridApiKey }) {
   const storm = stormLabel(kp);
   const subject = `🌌 Aurora alert — Northern Lights may be visible RIGHT NOW`;
 
@@ -112,8 +147,7 @@ async function sendAuroraEmail(subscriber, kp, { awsAccessKeyId, awsSecretAccess
     from: 'When To Look <hello@whentolook.com>',
     subject,
     html,
-    accessKeyId: awsAccessKeyId,
-    secretAccessKey: awsSecretAccessKey,
+    apiKey: resendApiKey,
   });
 }
 
@@ -162,6 +196,13 @@ async function checkAurora(env, kpOverride = null) {
       continue;
     }
 
+    // Daytime check: aurora isn't visible if the sun is above civil twilight (-6°)
+    const sunAlt = solarAltitudeDeg(sub.latitude, sub.longitude, new Date());
+    if (sunAlt > -6) {
+      console.log(`[aurora] Skipped for ${sub.email} — daytime (sun altitude ${sunAlt.toFixed(1)}°)`);
+      continue;
+    }
+
     // Weather suppression: skip if subscriber opted in and it's cloudy right now
     if (sub.suppress_if_cloudy) {
       let cover = null;
@@ -178,7 +219,7 @@ async function checkAurora(env, kpOverride = null) {
 
     // Send directly
     try {
-      const emailId = await sendAuroraEmail(sub, currentKp, { awsAccessKeyId: env.AWS_ACCESS_KEY_ID, awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY });
+      const emailId = await sendAuroraEmail(sub, currentKp, { sendgridApiKey: env.SENDGRID_API_KEY });
 
       await env.DB.prepare(`
         INSERT INTO notification_log (id, subscriber_id, event_type, event_id, sent_at, email_id)

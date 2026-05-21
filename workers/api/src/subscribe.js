@@ -120,17 +120,17 @@ async function sendConfirmationEmail(email, token, env) {
 </body>
 </html>`;
 
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      'Authorization': `Bearer ${env.SENDGRID_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'When To Look <hello@whentolook.com>',
-      to: email,
+      personalizations: [{ to: [{ email }] }],
+      from: { name: 'When To Look', email: 'hello@whentolook.com' },
       subject: '✅ Confirm your When To Look subscription',
-      html,
+      content: [{ type: 'text/html', value: html }],
     }),
   });
 

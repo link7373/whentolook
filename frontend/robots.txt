@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /confirm
+Disallow: /unsubscribe
+Disallow: /preferences
+Disallow: /setup
+
+Sitemap: https://whentolook.com/sitemap.xml

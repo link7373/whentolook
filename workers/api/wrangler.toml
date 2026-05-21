@@ -2,6 +2,10 @@ name = "whentolook-api"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
+[[routes]]
+pattern = "api.whentolook.com"
+custom_domain = true
+
 [vars]
 FRONTEND_URL = "https://whentolook.com"
 
