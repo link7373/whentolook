@@ -48,16 +48,35 @@ export async function computeIssEvents(subscriber, now, db, n2yoApiKey) {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`[iss] N2YO API error ${res.status} for subscriber ${subscriber.id}`);
+      const body = await res.text().catch(() => '');
+      console.error(`[iss] UPSTREAM FAILURE — N2YO returned ${res.status} for subscriber ${subscriber.id}: ${body.slice(0, 200)}`);
       return [];
     }
     data = await res.json();
   } catch (err) {
-    console.error(`[iss] Fetch failed for subscriber ${subscriber.id}:`, err.message);
+    console.error(`[iss] UPSTREAM FAILURE — N2YO fetch threw for subscriber ${subscriber.id}:`, err.message);
+    return [];
+  }
+
+  // N2YO reports an error in the body with a 200 status, so a bad key looks like
+  // a successful call that simply found no passes.
+  if (data.error) {
+    console.error(`[iss] UPSTREAM FAILURE — N2YO error payload for subscriber ${subscriber.id}: ${data.error}`);
     return [];
   }
 
   const passes = data.passes || [];
+
+  // "No passes" and "the API is broken" previously produced identical silence,
+  // which is why the ISS gap starting 2026-07-24 could not be diagnosed after
+  // the fact. Distinguish them explicitly: N2YO reports how many passes it found
+  // in transactionscount/info, so an empty list with a healthy response is a
+  // genuine quiet sky, not a failure.
+  if (passes.length === 0) {
+    console.log(`[iss] No ISS passes returned for subscriber ${subscriber.id} — upstream healthy, sky is quiet (this is normal; visible passes come in multi-week cycles)`);
+  } else {
+    console.log(`[iss] N2YO returned ${passes.length} candidate pass(es) for subscriber ${subscriber.id}`);
+  }
 
   // Group passes by UTC calendar date, keeping only those during dark skies
   // (sun below civil twilight = -6 deg at the time of the actual pass)

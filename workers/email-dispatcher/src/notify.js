@@ -2,9 +2,9 @@
 // Channel-agnostic notification dispatch.
 // Currently routes to email only. Adding SMS later means adding a branch here.
 
-import { sendEmail } from './resend.js';
+import { sendEmail } from './mailer.js';
 
-export async function notify(subscriber, event, { sendgridApiKey }) {
+export async function notify(subscriber, event, { apiKey }) {
   const { html, subject } = renderTemplate(event);
 
   const messageId = await sendEmail({
@@ -12,7 +12,7 @@ export async function notify(subscriber, event, { sendgridApiKey }) {
     from: 'When To Look <hello@whentolook.com>',
     subject,
     html,
-    apiKey: sendgridApiKey,
+    apiKey,
   });
 
   return messageId;

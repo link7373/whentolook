@@ -26,7 +26,7 @@ The notification IS the product. The website is just the sign-up form. Keep ever
 | Frontend | Static HTML/CSS/JS | Single page, hosted on Cloudflare Pages |
 | Backend | Cloudflare Workers | API endpoints for sign-up, preference management, notification dispatch |
 | Database | Cloudflare D1 (SQLite) | Subscribers, preferences, event queue, sent log |
-| Email | Resend (resend.com) | Free tier: 100 emails/day. Upgrade to $20/mo at scale (50K/mo). Use their API. |
+| Email | Brevo (brevo.com) | Free tier: 300 emails/day. Sending lives in each Worker's `src/mailer.js` — keep it vendor-neutral. |
 | Cron | Cloudflare Workers Cron Triggers | Scheduled jobs for event computation and email dispatch |
 | Domain | whentolook.com | Cloudflare registrar or Namecheap, DNS on Cloudflare |
 
@@ -307,7 +307,7 @@ CREATE TABLE notification_log (
   event_type TEXT NOT NULL,
   event_id TEXT,                 -- Unique event identifier (e.g., ISS pass timestamp, shower name + year)
   sent_at TEXT NOT NULL,
-  email_id TEXT                  -- Resend message ID for tracking
+  email_id TEXT                  -- Provider message ID for tracking
 );
 
 CREATE TABLE event_queue (
@@ -384,7 +384,7 @@ Special real-time monitor for aurora alerts.
    a. Fetch all aurora-subscribed, active subscribers
    b. For each, check if Kp meets their latitude threshold
    c. Check notification_log — only alert if no aurora alert sent in last 12 hours
-   d. If conditions met, queue immediate email (bypass event_queue, send directly via Resend)
+   d. If conditions met, queue immediate email (bypass event_queue, send directly via the mailer)
    e. Log to notification_log
 
 ### Worker 4: Email Dispatcher (Cron — runs every 5 minutes)
@@ -394,7 +394,7 @@ Picks up pending events from event_queue that are due and sends emails.
 **Flow:**
 1. Query: `SELECT * FROM event_queue WHERE status = 'pending' AND notify_at <= datetime('now') LIMIT 50`
 2. For each event, render the email using the appropriate template
-3. Send via Resend API
+3. Send via the mailer (Brevo)
 4. Update status to 'sent' and log to notification_log
 5. On failure, update status to 'failed' (retry logic: try 3 times, then skip)
 
@@ -487,13 +487,14 @@ Show a mockup/preview of what a notification email looks like. Use the Perseid m
 | N2YO | ISS + Starlink pass predictions | 1000 calls/hour | Yes — register at n2yo.com |
 | NOAA SWPC | Aurora Kp index + forecast | Unlimited, no key | No |
 | JPL CNEOS | Asteroid close approaches | Unlimited, no key | No |
-| Resend | Email delivery | 100 emails/day, 1 domain | Yes — register at resend.com |
+| Brevo | Email delivery | 300 emails/day | Yes — register at brevo.com |
 | Cloudflare | Pages, Workers, D1 | Generous free tier | Yes — Cloudflare account |
 
 **Environment variables (Workers secrets):**
 ```
 N2YO_API_KEY=...
-RESEND_API_KEY=...
+BREVO_API_KEY=...
+HEARTBEAT_URL=...   # optional, external monitor for the daily health check
 ```
 
 ---
@@ -567,7 +568,7 @@ Create these as static JSON files bundled with the Worker or stored in KV:
 1. [ ] Register whentolook.com domain
 2. [ ] Set up Cloudflare account, Pages project, D1 database
 3. [ ] Register N2YO API key
-4. [ ] Register Resend account, verify domain (add DNS records)
+4. [ ] Register Brevo account, verify domain (add DNS records)
 5. [ ] Build and deploy static frontend to Cloudflare Pages
 6. [ ] Build and deploy Workers (API, Event Computer, Aurora Monitor, Email Dispatcher)
 7. [ ] Create D1 database tables

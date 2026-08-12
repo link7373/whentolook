@@ -3,7 +3,7 @@
 // If Kp meets the threshold for any subscriber's latitude, sends an immediate alert.
 // Bypasses event_queue for real-time delivery. 12-hour suppression prevents spam.
 
-import { sendEmail } from './resend.js';
+import { sendEmail } from './mailer.js';
 import { getCloudCover } from './weather.js';
 
 // Minimum Kp required to see aurora at a given latitude (absolute value)
@@ -71,7 +71,7 @@ async function fetchCurrentKp() {
   return parseFloat(latest[1]);
 }
 
-async function sendAuroraEmail(subscriber, kp, { sendgridApiKey }) {
+async function sendAuroraEmail(subscriber, kp, { apiKey }) {
   const storm = stormLabel(kp);
   const subject = `🌌 Aurora alert — Northern Lights may be visible RIGHT NOW`;
 
@@ -147,7 +147,7 @@ async function sendAuroraEmail(subscriber, kp, { sendgridApiKey }) {
     from: 'When To Look <hello@whentolook.com>',
     subject,
     html,
-    apiKey: resendApiKey,
+    apiKey,
   });
 }
 
@@ -219,7 +219,7 @@ async function checkAurora(env, kpOverride = null) {
 
     // Send directly
     try {
-      const emailId = await sendAuroraEmail(sub, currentKp, { sendgridApiKey: env.SENDGRID_API_KEY });
+      const emailId = await sendAuroraEmail(sub, currentKp, { apiKey: env.BREVO_API_KEY });
 
       await env.DB.prepare(`
         INSERT INTO notification_log (id, subscriber_id, event_type, event_id, sent_at, email_id)

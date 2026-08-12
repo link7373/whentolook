@@ -1,4 +1,6 @@
 // subscribe.js
+import { sendEmail } from './mailer.js';
+
 export async function handleSubscribe(request, env) {
   let body;
   try {
@@ -120,22 +122,19 @@ async function sendConfirmationEmail(email, token, env) {
 </body>
 </html>`;
 
-  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email }] }],
-      from: { name: 'When To Look', email: 'hello@whentolook.com' },
+  // A failure here means the signup silently dies at the confirmation step, so
+  // log it loudly enough to be findable in Workers Logs. Rethrowing would fail
+  // the whole request after the subscriber row is already written, so we don't.
+  try {
+    await sendEmail({
+      to: email,
+      from: 'When To Look <hello@whentolook.com>',
       subject: '✅ Confirm your When To Look subscription',
-      content: [{ type: 'text/html', value: html }],
-    }),
-  });
-
-  if (!res.ok) {
-    console.error('Failed to send confirmation email:', await res.text());
+      html,
+      apiKey: env.BREVO_API_KEY,
+    });
+  } catch (err) {
+    console.error(`[subscribe] CONFIRMATION EMAIL FAILED for ${email}:`, err.message);
   }
 }
 
