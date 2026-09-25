@@ -175,6 +175,13 @@
       document.getElementById('confirmed-banner').hidden = false;
     }
 
+    // Remember where this visitor came from (?ref=share-iss etc., set by the
+    // share links in alert emails) so it survives the hop to setup.html.
+    const ref = new URLSearchParams(location.search).get('ref');
+    if (ref) {
+      try { sessionStorage.setItem('wtl_ref', ref); } catch (_) { /* storage blocked — fine */ }
+    }
+
     // Email form → redirect to setup page
     document.getElementById('email-form').addEventListener('submit', function(e) {
       e.preventDefault();
@@ -186,7 +193,10 @@
         return;
       }
       errorEl.style.display = 'none';
-      window.location.href = 'setup.html?email=' + encodeURIComponent(email);
+      let savedRef = ref;
+      try { savedRef = savedRef || sessionStorage.getItem('wtl_ref'); } catch (_) {}
+      window.location.href = 'setup.html?email=' + encodeURIComponent(email)
+        + (savedRef ? '&ref=' + encodeURIComponent(savedRef) : '');
     });
   </script>
 

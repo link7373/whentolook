@@ -1,6 +1,9 @@
 // index.js
 import { notify } from './notify.js';
 import { getCloudCover } from './weather.js';
+// The eclipse table lives with the event computer. It's imported here only so the
+// health check can warn before the data runs out. Wrangler bundles it at deploy time.
+import { ECLIPSE_DATA_THROUGH } from '../../event-computer/src/data/eclipses.js';
 
 // How long after notify_at an email is still worth sending.
 //
@@ -26,6 +29,15 @@ const MAX_ATTEMPTS = BACKOFF_MINUTES.length + 1;
 
 // Health check thresholds.
 const SILENCE_ALERT_HOURS = 72;
+// Start failing the health check this long before the eclipse table ends.
+// That leaves months to paste in the next rows from NASA's catalog.
+const DATA_RUNWAY_ALERT_DAYS = 180;
+
+// Brevo block reasons that mean "stop emailing this person".
+const BREVO_STOP_REASONS = new Set([
+  'unsubscribedViaEmail', 'unsubscribedViaApi', 'unsubscribedViaMA',
+  'contactFlaggedAsSpam', 'hardBounce', 'adminBlocked',
+]);
 
 export default {
   async scheduled(event, env, ctx) {
@@ -61,10 +73,17 @@ export default {
       if (!to) return new Response('Missing ?to= param', { status: 400 });
 
       const fixtures = {
+        // Same shape as the event computer's output. The values are
+        // illustrative, not real computed circumstances. For those, run
+        // workers/event-computer/scripts/simulate-events.mjs.
         meteor: {
           name: 'Perseids', zhr: 100, radiant_constellation: 'Perseus',
           parent_object: 'Comet Swift-Tuttle', velocity_kms: 59,
-          particle_size: 'grain-of-sand', unsubscribe_token: 'test-token',
+          particle_size: 'grain-of-sand', peak: '2027-08-13T08:10:00Z',
+          dark_start: '2027-08-13T05:48:00Z', dark_end: '2027-08-13T10:52:00Z',
+          darkness: 'astronomical', moon_illumination: 12, moon_up_fraction: 0.1,
+          moon_conditions: 'excellent', timezone: 'America/Vancouver',
+          unsubscribe_token: 'test-token',
         },
         iss: {
           start_utc: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
@@ -73,19 +92,35 @@ export default {
           timezone: 'America/Vancouver', unsubscribe_token: 'test-token',
         },
         fullmoon: {
-          name: 'Harvest Moon', supermoon: true,
-          name_origin: 'Named for the full moon closest to the autumn equinox, when farmers historically used the extra light to harvest crops late into the evening',
-          unsubscribe_token: 'test-token',
+          name: 'Cold Moon', supermoon: true, distance_km: 356740, percent_closer: 7.2,
+          name_origin: 'Named for the long, cold nights as winter sets in',
+          full_moon_utc: '2026-12-24T01:28:00Z', moonrise_utc: '2026-12-23T23:40:00Z',
+          moonrise_direction: 'NE', circumpolar: false,
+          timezone: 'America/Vancouver', unsubscribe_token: 'test-token',
         },
         lunar_eclipse: {
           type: 'total',
-          partial_start: '2026-03-03T04:30:00Z', total_start: '2026-03-03T05:41:00Z',
-          maximum: '2026-03-03T06:33:00Z', total_end: '2026-03-03T07:25:00Z',
-          partial_end: '2026-03-03T08:37:00Z', is_reminder: false,
+          penumbral_start: '2029-06-26T01:14:00Z', partial_start: '2029-06-26T01:33:00Z',
+          total_start: '2029-06-26T02:31:00Z', maximum: '2029-06-26T03:22:00Z',
+          total_end: '2029-06-26T04:13:00Z', partial_end: '2029-06-26T05:12:00Z',
+          penumbral_end: '2029-06-26T05:30:00Z',
+          look_direction: 'SE', look_altitude: 14,
+          moon_rises_during: '2029-06-26T03:40:00Z', moon_sets_during: null,
+          contact_visible: { penumbral_start: false, partial_start: false, total_start: false, maximum: false, total_end: true, partial_end: true, penumbral_end: true },
+          is_reminder: false, timezone: 'America/New_York',
           unsubscribe_token: 'test-token',
         },
         solar_eclipse: {
-          type: 'total', path_description: 'Arctic, Greenland, Iceland, Spain',
+          type: 'total', local_type: 'partial', percent_covered: 87,
+          location_name: 'Madrid, Spain',
+          local_start: '2027-08-02T07:42:00Z', local_maximum: '2027-08-02T08:51:00Z',
+          local_end: '2027-08-02T10:05:00Z',
+          visible_start: '2027-08-02T07:42:00Z', visible_end: '2027-08-02T10:05:00Z',
+          starts_before_sunrise: false, ends_after_sunset: false,
+          sun_altitude_at_max: 40, sun_direction_at_max: 'E',
+          path_description: 'southern Spain, North Africa (including Luxor, Egypt) and the Arabian Peninsula',
+          map_url: 'https://eclipse.gsfc.nasa.gov/SEsearch/SEsearchmap.php?Ecl=20270802',
+          is_reminder: false, timezone: 'Europe/Madrid',
           unsubscribe_token: 'test-token',
         },
         starlink: {
@@ -266,6 +301,12 @@ async function buildHealthReport(env) {
     problems.push(`Nothing sent in ${Math.round(hoursSinceSend)}h despite ${dueInWindow.n} event(s) coming due.`);
   }
 
+  // The 2026 tables ran dry silently once. Don't let the eclipse table do the same.
+  const runwayDays = Math.floor((Date.parse(`${ECLIPSE_DATA_THROUGH}T00:00:00Z`) - Date.now()) / 86400000);
+  if (runwayDays < DATA_RUNWAY_ALERT_DAYS) {
+    problems.push(`Eclipse data ends ${ECLIPSE_DATA_THROUGH} (${runwayDays} days). Extend workers/event-computer/src/data/eclipses.js from NASA's catalog.`);
+  }
+
   return {
     healthy: problems.length === 0,
     checked_at: new Date().toISOString(),
@@ -273,12 +314,58 @@ async function buildHealthReport(env) {
     hours_since_last_send: Number.isFinite(hoursSinceSend) ? Math.round(hoursSinceSend) : null,
     events_due_in_window: dueInWindow?.n ?? 0,
     terminal_failures_24h: recentlyDead?.n ?? 0,
+    eclipse_data_through: ECLIPSE_DATA_THROUGH,
     problems,
   };
 }
 
+// Brevo keeps its own block list: people who unsubscribed through Brevo's
+// List-Unsubscribe header, marked us as spam, or hard-bounced. Brevo silently
+// drops mail to them. If D1 still says "active", we'd keep "sending" into
+// that void and the logs would look healthy. Mirror the list into D1 daily.
+async function syncBrevoBlocks(env) {
+  if (!env.BREVO_API_KEY) return { deactivated: 0, error: 'BREVO_API_KEY not set' };
+
+  const day = ms => new Date(ms).toISOString().slice(0, 10);
+  // A week of lookback, so a few missed daily runs don't lose anyone.
+  const range = `startDate=${day(Date.now() - 7 * 86400000)}&endDate=${day(Date.now())}`;
+  let deactivated = 0;
+
+  try {
+    for (let offset = 0; offset < 1000; offset += 100) {
+      const res = await fetch(`https://api.brevo.com/v3/smtp/blockedContacts?${range}&limit=100&offset=${offset}`, {
+        headers: { 'api-key': env.BREVO_API_KEY, accept: 'application/json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) throw new Error(`Brevo blockedContacts ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const { contacts = [] } = await res.json();
+
+      for (const c of contacts) {
+        if (!BREVO_STOP_REASONS.has(c.reason?.code)) continue;
+        const result = await env.DB.prepare(
+          'UPDATE subscribers SET active = 0 WHERE lower(email) = lower(?) AND active = 1'
+        ).bind(c.email).run();
+        if (result.meta?.changes) {
+          deactivated++;
+          console.log(`[health] Deactivated ${c.email}: blocked in Brevo (${c.reason.code})`);
+        }
+      }
+      if (contacts.length < 100) break;
+    }
+    return { deactivated, error: null };
+  } catch (err) {
+    return { deactivated, error: err.message };
+  }
+}
+
 async function runHealthCheck(env) {
+  const sync = await syncBrevoBlocks(env);
   const report = await buildHealthReport(env);
+  report.brevo_blocks_deactivated = sync.deactivated;
+  if (sync.error) {
+    report.healthy = false;
+    report.problems.push(`Brevo block-list sync failed: ${sync.error}`);
+  }
 
   if (report.healthy) {
     console.log('[health] OK —', JSON.stringify(report));

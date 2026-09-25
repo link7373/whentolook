@@ -129,8 +129,12 @@ async function sendAuroraEmail(subscriber, kp, { apiKey }) {
     <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#4B5563;">
       <strong style="color:#1a1f2e;">Conditions:</strong> Clear skies required. Aurora activity can fade quickly — head out within the next hour for the best chance.
     </p>
+    ${shareBlock()}
 
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 20px;">
+    <p style="margin:0 0 12px;font-size:12px;color:#6B7280;text-align:center;line-height:1.6;">
+      Forwarded this? <a href="https://whentolook.com/?ref=forwarded" style="color:#D4A853;text-decoration:none;font-weight:600;">Get your own alerts, free &rarr;</a>
+    </p>
     <p style="margin:0;font-size:11px;color:#9CA3AF;text-align:center;line-height:1.8;">
       You're receiving this because you signed up at <a href="https://whentolook.com" style="color:#D4A853;text-decoration:none;">whentolook.com</a><br>
       <a href="https://whentolook.com/unsubscribe?token=${subscriber.unsubscribe_token}" style="color:#9CA3AF;text-decoration:none;">Unsubscribe</a> &nbsp;·&nbsp;
@@ -148,7 +152,30 @@ async function sendAuroraEmail(subscriber, kp, { apiKey }) {
     subject,
     html,
     apiKey,
+    unsubscribeUrl: `https://api.whentolook.com/unsubscribe?token=${encodeURIComponent(subscriber.unsubscribe_token)}`,
   });
+}
+
+// Same share block as the dispatcher's notify.js (Workers are bundled
+// separately, so it's duplicated like mailer.js). The aurora alert is the
+// most "text a friend right now" email we send.
+function shareBlock() {
+  const url = 'https://whentolook.com/?ref=share-aurora';
+  const text = 'Northern Lights alert: aurora may be visible right now. Look north, away from city lights.';
+  const sms = `sms:?&amp;body=${encodeURIComponent(`${text} ${url}`)}`;
+  const mail = `mailto:?subject=${encodeURIComponent('Look up tonight')}&amp;body=${encodeURIComponent(`${text}\n\nI get these alerts free from When To Look: ${url}`)}`;
+  const link = 'color:#D4A853;font-weight:700;text-decoration:none;';
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0F1A;border-radius:8px;margin:28px 0 0;">
+      <tr><td style="padding:20px 24px;text-align:center;">
+        <p style="margin:0 0 10px;font-size:15px;color:#E8E6E1;line-height:1.5;">Share this with someone who should look up tonight &rarr;</p>
+        <p style="margin:0;font-size:14px;">
+          <a href="${sms}" style="${link}">Text a friend</a>
+          <span style="color:#6B7280;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+          <a href="${mail}" style="${link}">Email a friend</a>
+        </p>
+      </td></tr>
+    </table>`;
 }
 
 async function checkAurora(env, kpOverride = null) {

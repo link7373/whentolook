@@ -14,26 +14,44 @@ function parseFrom(from) {
   return { email: from };
 }
 
-export async function sendEmail({ to, from, subject, html, apiKey }) {
+// unsubscribeUrl: when set, adds RFC 8058 one-click unsubscribe headers.
+//
+// Why we set our own: Brevo adds a List-Unsubscribe header by default that
+// points at *Brevo's* unsubscribe. Clicking Gmail's "Unsubscribe" then blocks
+// the address inside Brevo while D1 still marks it active, and later sends
+// are dropped with nothing recorded anywhere. Ours points at the API worker,
+// so the inbox button and our database agree. (The dispatcher's daily Brevo
+// block-list sync covers the case where Brevo keeps its own header anyway.)
+export async function sendEmail({ to, from, subject, html, apiKey, unsubscribeUrl = null }) {
   // Fail loudly and unambiguously on a missing secret. Without this the request
   // goes out unauthenticated and comes back as a generic 401, which reads like a
   // revoked key rather than one that was never set.
   if (!apiKey) throw new Error('BREVO_API_KEY is not set on this Worker');
 
-  const res = await fetch(BREVO_API_URL, {
-    method: 'POST',
-    headers: {
-      'api-key': apiKey,
-      'content-type': 'application/json',
-      'accept': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: parseFrom(from),
-      to: [{ email: to }],
-      subject,
-      htmlContent: html,
-    }),
-  });
+  const payload = {
+    sender: parseFrom(from),
+    to: [{ email: to }],
+    subject,
+    htmlContent: html,
+  };
+  if (unsubscribeUrl) {
+    payload.headers = {
+      'List-Unsubscribe': `<${unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    };
+  }
+
+  let res = await post(payload, apiKey);
+
+  // Brevo's docs say "standard email headers are not supported" in `headers`.
+  // If it rejects ours, send without them. An alert without the header beats
+  // no alert, and the log line makes the rejection visible.
+  if (res.status === 400 && payload.headers) {
+    const text = await res.text();
+    console.error(`[mailer] Brevo rejected List-Unsubscribe headers, resending without them: ${text.slice(0, 300)}`);
+    delete payload.headers;
+    res = await post(payload, apiKey);
+  }
 
   if (!res.ok) {
     const text = await res.text();
@@ -43,4 +61,16 @@ export async function sendEmail({ to, from, subject, html, apiKey }) {
 
   const data = await res.json().catch(() => ({}));
   return data.messageId ?? 'sent';
+}
+
+function post(payload, apiKey) {
+  return fetch(BREVO_API_URL, {
+    method: 'POST',
+    headers: {
+      'api-key': apiKey,
+      'content-type': 'application/json',
+      'accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 }

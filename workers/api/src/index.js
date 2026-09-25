@@ -25,7 +25,9 @@ export default {
     if (request.method === 'GET' && url.pathname === '/confirm') {
       return handleConfirm(request, env);
     }
-    if (request.method === 'GET' && url.pathname === '/unsubscribe') {
+    // GET: the link in the email footer. POST: RFC 8058 one-click unsubscribe,
+    // sent by the mail client when someone clicks the inbox "Unsubscribe" button.
+    if ((request.method === 'GET' || request.method === 'POST') && url.pathname === '/unsubscribe') {
       return handleUnsubscribe(request, env);
     }
     if (url.pathname === '/preferences') {

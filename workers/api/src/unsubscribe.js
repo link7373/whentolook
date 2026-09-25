@@ -19,6 +19,12 @@ export async function handleUnsubscribe(request, env) {
     'UPDATE subscribers SET active = 0 WHERE id = ?'
   ).bind(sub.id).run();
 
+  // One-click unsubscribe from the inbox. The mail provider posts in the
+  // background, so it needs a plain 200, not a page.
+  if (request.method === 'POST') {
+    return new Response('Unsubscribed', { status: 200 });
+  }
+
   return new Response(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
   body { background: #0B0F1A; color: #E8E6E1; font-family: Arial, sans-serif;

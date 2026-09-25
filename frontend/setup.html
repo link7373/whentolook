@@ -261,6 +261,9 @@
             location_name: locName,
             preferences: prefs,
             suppress_if_cloudy: document.getElementById('suppress-if-cloudy').checked,
+            referral_source: params.get('ref') || (function() {
+              try { return sessionStorage.getItem('wtl_ref') || undefined; } catch (_) { return undefined; }
+            })(),
           }),
         });
 
