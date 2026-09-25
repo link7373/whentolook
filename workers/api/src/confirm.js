@@ -19,5 +19,12 @@ export async function handleConfirm(request, env) {
     'UPDATE subscribers SET confirmed = 1, confirm_token = NULL WHERE id = ?'
   ).bind(sub.id).run();
 
+  // A browser fetch from whentolook.com/confirm (it sends an Origin header)
+  // gets a plain 200, and the page redirects itself. Following a cross-origin
+  // redirect inside fetch() fails CORS. A direct visit to the link still
+  // gets the redirect.
+  if (request.headers.get('Origin')) {
+    return new Response('Confirmed', { status: 200 });
+  }
   return Response.redirect(`${env.FRONTEND_URL}/?confirmed=1`, 302);
 }

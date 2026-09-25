@@ -6,6 +6,17 @@ import { handlePreferences } from './preferences.js';
 
 export default {
   async fetch(request, env, ctx) {
+    const res = await route(request, env);
+    // The confirm/unsubscribe pages on whentolook.com call this API from the
+    // browser. Without this header the browser hides every response from them,
+    // so a successful confirmation showed up as "Network error".
+    const out = new Response(res.body, res); // Response.redirect() headers are immutable
+    out.headers.set('Access-Control-Allow-Origin', '*');
+    return out;
+  },
+};
+
+async function route(request, env) {
     const url = new URL(request.url);
 
     // CORS preflight
@@ -35,5 +46,4 @@ export default {
     }
 
     return new Response('Not found', { status: 404 });
-  },
-};
+}

@@ -78,7 +78,7 @@
   <script>
     const token = new URLSearchParams(window.location.search).get('token');
     if (token) {
-      fetch('https://whentolook-api.link7373.workers.dev/unsubscribe?token=' + encodeURIComponent(token))
+      fetch('https://api.whentolook.com/unsubscribe?token=' + encodeURIComponent(token))
         .then((res) => res.text().then((text) => ({ ok: res.ok, text })))
         .then(({ ok }) => {
           if (ok) {
