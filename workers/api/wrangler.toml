@@ -2,8 +2,19 @@ name = "whentolook-api"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
+[[routes]]
+pattern = "api.whentolook.com"
+custom_domain = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 FRONTEND_URL = "https://whentolook.com"
+
+# Secrets (set via: wrangler secret put BREVO_API_KEY)
+#   BREVO_API_KEY — required for signup confirmation emails.
 
 [[d1_databases]]
 binding = "DB"

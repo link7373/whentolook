@@ -1,4 +1,6 @@
 // subscribe.js
+import { sendEmail } from './mailer.js';
+
 export async function handleSubscribe(request, env) {
   let body;
   try {
@@ -7,7 +9,7 @@ export async function handleSubscribe(request, env) {
     return json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { email, latitude, longitude, location_name, timezone, preferences } = body;
+  const { email, latitude, longitude, location_name, timezone, preferences, suppress_if_cloudy, referral_source } = body;
 
   if (!email || latitude == null || longitude == null || !timezone) {
     return json({ error: 'Missing required fields: email, latitude, longitude, timezone' }, 400);
@@ -24,18 +26,20 @@ export async function handleSubscribe(request, env) {
   // Upsert subscriber — re-issues confirmation if they sign up again
   try {
     await env.DB.prepare(`
-      INSERT INTO subscribers (id, email, latitude, longitude, location_name, timezone, created_at, confirm_token, unsubscribe_token)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO subscribers (id, email, latitude, longitude, location_name, timezone, created_at, confirm_token, unsubscribe_token, suppress_if_cloudy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
         latitude = excluded.latitude,
         longitude = excluded.longitude,
         location_name = excluded.location_name,
         timezone = excluded.timezone,
         confirm_token = excluded.confirm_token,
+        suppress_if_cloudy = excluded.suppress_if_cloudy,
         active = 1
     `).bind(
       crypto.randomUUID(), email, latitude, longitude,
-      location_name || null, timezone, now, confirmToken, unsubscribeToken
+      location_name || null, timezone, now, confirmToken, unsubscribeToken,
+      suppress_if_cloudy ? 1 : 0
     ).run();
   } catch (err) {
     console.error('DB error on subscribe:', err);
@@ -47,8 +51,10 @@ export async function handleSubscribe(request, env) {
     'SELECT id, confirm_token, unsubscribe_token FROM subscribers WHERE email = ?'
   ).bind(email).first();
 
+  await recordReferral(sub.id, referral_source, env);
+
   // Upsert preferences
-  const allTypes = ['iss', 'starlink', 'meteor', 'fullmoon', 'lunar_eclipse', 'solar_eclipse', 'aurora', 'asteroid'];
+  const allTypes = ['iss', 'starlink', 'meteor', 'fullmoon', 'lunar_eclipse', 'solar_eclipse', 'aurora'];
   const enabled = Array.isArray(preferences) ? preferences : allTypes;
 
   for (const type of allTypes) {
@@ -118,22 +124,19 @@ async function sendConfirmationEmail(email, token, env) {
 </body>
 </html>`;
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'When To Look <hello@whentolook.com>',
+  // A failure here means the signup silently dies at the confirmation step, so
+  // log it loudly enough to be findable in Workers Logs. Rethrowing would fail
+  // the whole request after the subscriber row is already written, so we don't.
+  try {
+    await sendEmail({
       to: email,
+      from: 'When To Look <hello@whentolook.com>',
       subject: '✅ Confirm your When To Look subscription',
       html,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error('Failed to send confirmation email:', await res.text());
+      apiKey: env.BREVO_API_KEY,
+    });
+  } catch (err) {
+    console.error(`[subscribe] CONFIRMATION EMAIL FAILED for ${email}:`, err.message);
   }
 }
 
@@ -145,4 +148,23 @@ function json(data, status = 200) {
       'Access-Control-Allow-Origin': '*',
     },
   });
+}
+
+// Where the signup came from, e.g. "share-iss" (see the share links in the
+// alert emails). Write-once: a returning subscriber keeps their original source.
+//
+// This is analytics, so a failure here must never cost a signup. The catch is
+// deliberate, and it logs to Workers observability. The likely failure is
+// migrations/003_referral_source.sql not yet applied.
+async function recordReferral(subscriberId, source, env) {
+  if (typeof source !== 'string') return;
+  const clean = source.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
+  if (!clean) return;
+  try {
+    await env.DB.prepare(
+      'UPDATE subscribers SET referral_source = ? WHERE id = ? AND referral_source IS NULL'
+    ).bind(clean, subscriberId).run();
+  } catch (err) {
+    console.error('[subscribe] Could not record referral_source (is migration 003 applied?):', err.message);
+  }
 }

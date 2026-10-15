@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — When To Look</title>
+  <meta name="description" content="Privacy policy for When To Look — what we collect, how we use it, and how to delete it.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Privacy page — centered content column */
+    .privacy-nav {
+      position: relative;
+      z-index: 10;
+      padding: 2rem 1.5rem 0;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .privacy-nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      letter-spacing: 0.01em;
+      transition: color 0.2s;
+    }
+
+    .privacy-nav a:hover {
+      color: var(--gold);
+    }
+
+    .privacy-wrap {
+      position: relative;
+      z-index: 10;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 6rem;
+    }
+
+    .privacy-wrap h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 5vw, 2.8rem);
+      font-weight: 400;
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .privacy-wrap .last-updated {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 3rem;
+    }
+
+    .privacy-wrap h2 {
+      font-family: var(--font-serif);
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: var(--gold);
+      margin: 2.5rem 0 0.75rem;
+    }
+
+    .privacy-wrap p {
+      color: var(--text);
+      line-height: 1.75;
+      margin-bottom: 1rem;
+    }
+
+    .privacy-wrap ul {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 1rem;
+    }
+
+    .privacy-wrap ul li {
+      color: var(--text);
+      line-height: 1.75;
+      padding-left: 1.25rem;
+      position: relative;
+      margin-bottom: 0.3rem;
+    }
+
+    .privacy-wrap ul li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: var(--muted);
+    }
+
+    .privacy-wrap a {
+      color: var(--gold);
+      text-decoration: none;
+    }
+
+    .privacy-wrap a:hover {
+      text-decoration: underline;
+    }
+
+    .privacy-divider {
+      border: none;
+      border-top: 1px solid var(--card-border);
+      margin: 3rem 0;
+    }
+
+    .privacy-footer {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+      padding-top: 1rem;
+    }
+
+    .privacy-footer a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .privacy-footer a:hover {
+      color: var(--gold);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background layers -->
+  <div class="nebula" aria-hidden="true"></div>
+  <div class="stars-layer" aria-hidden="true"></div>
+  <div class="stars-large" aria-hidden="true"></div>
+  <div class="stars-micro" aria-hidden="true"></div>
+
+  <nav class="privacy-nav" aria-label="Back to site">
+    <a href="/">&larr; Back to When To Look</a>
+  </nav>
+
+  <main class="privacy-wrap">
+
+    <h1>Privacy Policy</h1>
+    <p class="last-updated">Last updated: April 1, 2026</p>
+
+    <p>This is a plain-language explanation of what data When To Look collects, why we collect it, and what happens to it. No legalese.</p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li><strong>Email address</strong> — required to send you notifications. That's the whole point.</li>
+      <li><strong>Location</strong> (latitude, longitude, and city name) — used only to compute which sky events are visible from where you are. We don't track your movements; you give us one location when you sign up.</li>
+      <li><strong>Notification preferences</strong> — which event types you've opted into (ISS passes, meteor showers, aurora alerts, etc.).</li>
+      <li><strong>Notification history</strong> — a log of which emails we've sent you. This is used purely to avoid sending you the same alert twice.</li>
+    </ul>
+
+    <h2>What we do not collect</h2>
+    <ul>
+      <li>Passwords (there's no account — no login, no dashboard)</li>
+      <li>Payment information (the service is free)</li>
+      <li>Browsing history, page analytics, or tracking data of any kind</li>
+      <li>Anything beyond what's listed above</li>
+    </ul>
+
+    <p>We use no cookies, no tracking pixels, and no third-party analytics scripts. If you view the source of this page, you won't find any.</p>
+
+    <h2>How we use your data</h2>
+    <p>We use it for one thing: sending you the sky event notifications you signed up for.</p>
+    <p>We never sell, share, rent, or trade your data with third parties. Your email and location will never appear in a marketing list or be used for any purpose other than the alerts you asked for.</p>
+    <p>We use <strong>AWS SES</strong> to deliver email. This means your email address passes through Amazon's servers in transit. Amazon's privacy policy governs their handling of that data.</p>
+
+    <h2>How to delete your data</h2>
+    <p>Click the <strong>Unsubscribe</strong> link at the bottom of any email we send you. This permanently removes your email address, location, and all associated preferences from our systems. There's no waiting period — it happens immediately.</p>
+    <p>Alternatively, email us at <a href="mailto:hello@whentolook.com">hello@whentolook.com</a> and we'll manually delete your data within 48 hours.</p>
+
+    <h2>Cookies</h2>
+    <p>None. We don't use cookies, session storage for tracking, or any persistent identifiers. The site works without any of that.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If we ever change what data we collect or how we use it, we'll email you before the change takes effect. You'll have the option to unsubscribe at that point if you're not comfortable with the change.</p>
+
+    <hr class="privacy-divider">
+
+    <h2>Questions?</h2>
+    <p>Email us: <a href="mailto:hello@whentolook.com">hello@whentolook.com</a></p>
+
+    <p class="privacy-footer">
+      <a href="/">&larr; Back to When To Look</a>
+    </p>
+
+  </main>
+
+</body>
+</html>

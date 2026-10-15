@@ -3,9 +3,21 @@ main = "src/index.js"
 compatibility_date = "2025-01-01"
 
 [triggers]
-crons = ["*/5 * * * *"]
+# */5 — the dispatch loop. 0 12 — the daily health check (dead man's switch).
+crons = ["*/5 * * * *", "0 12 * * *"]
+
+# Without this, console.log/error are discarded and an outage leaves no trace.
+# This is why the July 2026 send failure went five weeks undiagnosed.
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 [[d1_databases]]
 binding = "DB"
 database_name = "whentolook"
 database_id = "3259f244-3af0-4219-b830-12b64174b3d1"
+
+# Secrets (set via: wrangler secret put <NAME>)
+#   BREVO_API_KEY  — required. Brevo transactional API key (xkeysib-...).
+#   HEARTBEAT_URL  — optional. External monitor ping URL (e.g. healthchecks.io).
+#                    Without it the health check logs but cannot alert.

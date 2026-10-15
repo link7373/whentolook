@@ -2,10 +2,32 @@
 // Computes visible Starlink train passes for subscribers.
 // Only relevant for recently-launched Starlink groups (within ~14 days of launch).
 // Uses CelesTrak to get recent NORAD IDs, then N2YO for pass predictions.
+// Like ISS: only queues the single best pass per calendar day, dark skies only.
 
 const CELESTRAK_URL = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=last-30-days&FORMAT=json';
 const TRAIN_WINDOW_DAYS = 14; // satellites form visible trains within this window post-launch
-const MIN_ELEVATION = 25; // degrees — lower threshold than ISS since trains are easier to spot
+const MIN_ELEVATION = 25;     // degrees -- lower threshold than ISS since trains are easier to spot
+
+// Returns the Sun's altitude in degrees for a given location and time (~1 deg accuracy).
+function solarAltitudeDeg(latDeg, lonDeg, date) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const D = JD - 2451545.0;
+  let L = (280.46 + 0.9856474 * D) % 360; if (L < 0) L += 360;
+  let g = (357.528 + 0.9856003 * D) % 360; if (g < 0) g += 360;
+  const lambda = L + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g));
+  const eps = 23.439 - 0.0000004 * D;
+  const dec = Math.asin(Math.sin(toRad(eps)) * Math.sin(toRad(lambda)));
+  let RA = toDeg(Math.atan2(Math.cos(toRad(eps)) * Math.sin(toRad(lambda)), Math.cos(toRad(lambda))));
+  if (RA < 0) RA += 360;
+  const GMST = (280.46061837 + 360.98564736629 * D) % 360;
+  const LST = (GMST + lonDeg + 360) % 360;
+  const HA = (LST - RA + 360) % 360;
+  const sinAlt = Math.sin(toRad(latDeg)) * Math.sin(dec) +
+    Math.cos(toRad(latDeg)) * Math.cos(dec) * Math.cos(toRad(HA));
+  return toDeg(Math.asin(sinAlt));
+}
 
 /**
  * Parses a CelesTrak JSON entry's epoch to a Date.
@@ -52,23 +74,28 @@ async function getRecentStarlinkIds(now) {
 
 /**
  * Computes Starlink train pass events for a subscriber.
+ * Returns at most one event per calendar day (best dark-sky pass by elevation).
  * Returns empty array if no recent launch or API failure.
  */
 export async function computeStarlinkEvents(subscriber, now, db, n2yoApiKey) {
   if (!n2yoApiKey) {
-    console.warn('[starlink] N2YO_API_KEY not set — skipping Starlink computation');
+    console.warn('[starlink] N2YO_API_KEY not set -- skipping Starlink computation');
     return [];
   }
 
   const recentIds = await getRecentStarlinkIds(now);
   if (recentIds.length === 0) {
-    console.log('[starlink] No recent Starlink launches — skipping');
+    console.log('[starlink] No recent Starlink launches -- skipping');
     return [];
   }
 
-  const events = [];
   const observerAlt = 0;
   const days = 2;
+
+  // Collect all candidate passes across all recent NORAD IDs
+  // Key: "dateKey-noradId", value: best pass for that satellite on that date
+  // Then we pick the single best per date across all satellites.
+  const passByDate = new Map(); // dateKey -> { pass, noradId }
 
   // Check a sample of recent IDs (first 20 max to avoid N2YO rate limits)
   const idsToCheck = recentIds.slice(0, 20);
@@ -88,41 +115,58 @@ export async function computeStarlinkEvents(subscriber, now, db, n2yoApiKey) {
     const passes = data.passes || [];
 
     for (const pass of passes) {
-      const notifyAtMs = pass.startUTC * 1000 - 30 * 60 * 1000;
-      const notifyAt = new Date(notifyAtMs).toISOString();
+      const passTimeMs = pass.startUTC * 1000;
+      const notifyAtMs = passTimeMs - 60 * 60 * 1000;
 
       if (notifyAtMs <= Date.now()) continue;
       const hoursAway = (notifyAtMs - Date.now()) / (1000 * 60 * 60);
       if (hoursAway > 36) continue;
 
-      const eventId = `starlink-${noradId}-${pass.startUTC}`;
+      // Only passes during dark skies (sun below civil twilight)
+      const passDate = new Date(passTimeMs);
+      const sunAlt = solarAltitudeDeg(subscriber.latitude, subscriber.longitude, passDate);
+      if (sunAlt > -6) continue;
 
-      const alreadySent = await db.prepare(`
-        SELECT id FROM notification_log WHERE subscriber_id = ? AND event_type = 'starlink' AND event_id = ?
-      `).bind(subscriber.id, eventId).first();
-      if (alreadySent) continue;
-
-      const alreadyQueued = await db.prepare(`
-        SELECT id FROM event_queue WHERE subscriber_id = ? AND event_type = 'starlink' AND event_id = ? AND status IN ('pending','sent')
-      `).bind(subscriber.id, eventId).first();
-      if (alreadyQueued) continue;
-
-      events.push({
-        event_type: 'starlink',
-        event_id: eventId,
-        notify_at: notifyAt,
-        event_data: JSON.stringify({
-          norad_id: noradId,
-          start_utc: new Date(pass.startUTC * 1000).toISOString(),
-          duration_seconds: pass.duration,
-          max_elevation: pass.maxEl,
-          start_az_compass: pass.startAzCompass,
-          end_az_compass: pass.endAzCompass,
-          recent_satellite_count: recentIds.length,
-          timezone: subscriber.timezone,
-        }),
-      });
+      const dateKey = passDate.toISOString().slice(0, 10);
+      const existing = passByDate.get(dateKey);
+      if (!existing || pass.maxEl > existing.pass.maxEl) {
+        passByDate.set(dateKey, { pass, noradId });
+      }
     }
+  }
+
+  const events = [];
+
+  for (const [, { pass, noradId }] of passByDate) {
+    const eventId = `starlink-${noradId}-${pass.startUTC}`;
+
+    const alreadySent = await db.prepare(`
+      SELECT id FROM notification_log WHERE subscriber_id = ? AND event_type = 'starlink' AND event_id = ?
+    `).bind(subscriber.id, eventId).first();
+    if (alreadySent) continue;
+
+    const alreadyQueued = await db.prepare(`
+      SELECT id FROM event_queue WHERE subscriber_id = ? AND event_type = 'starlink' AND event_id = ? AND status IN ('pending','sent')
+    `).bind(subscriber.id, eventId).first();
+    if (alreadyQueued) continue;
+
+    const notifyAt = new Date(pass.startUTC * 1000 - 60 * 60 * 1000).toISOString();
+
+    events.push({
+      event_type: 'starlink',
+      event_id: eventId,
+      notify_at: notifyAt,
+      event_data: JSON.stringify({
+        norad_id: noradId,
+        start_utc: new Date(pass.startUTC * 1000).toISOString(),
+        duration_seconds: pass.duration,
+        max_elevation: pass.maxEl,
+        start_az_compass: pass.startAzCompass,
+        end_az_compass: pass.endAzCompass,
+        recent_satellite_count: recentIds.length,
+        timezone: subscriber.timezone,
+      }),
+    });
   }
 
   return events;

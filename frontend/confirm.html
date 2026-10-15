@@ -74,7 +74,7 @@
     // This page is a fallback in case that redirect doesn't happen.
     const token = new URLSearchParams(window.location.search).get('token');
     if (token) {
-      fetch('https://whentolook-api.link7373.workers.dev/confirm?token=' + encodeURIComponent(token))
+      fetch('https://api.whentolook.com/confirm?token=' + encodeURIComponent(token))
         .then((res) => {
           if (res.ok || res.redirected) {
             window.location.href = '/?confirmed=1';

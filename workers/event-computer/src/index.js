@@ -3,7 +3,6 @@ import { computeMeteorEvents } from './events/meteors.js';
 import { computeIssEvents } from './events/iss.js';
 import { computeFullMoonEvents } from './events/fullmoons.js';
 import { computeEclipseEvents } from './events/eclipses.js';
-import { computeAsteroidEvents } from './events/asteroids.js';
 import { computeStarlinkEvents } from './events/starlink.js';
 
 export default {
@@ -32,7 +31,7 @@ async function computeAllEvents(env) {
   // Fetch all active, confirmed subscribers with their enabled event types
   const { results: subscribers } = await env.DB.prepare(`
     SELECT
-      s.id, s.email, s.latitude, s.longitude, s.timezone, s.unsubscribe_token,
+      s.id, s.email, s.latitude, s.longitude, s.location_name, s.timezone, s.unsubscribe_token,
       GROUP_CONCAT(p.event_type) AS subscribed_types
     FROM subscribers s
     JOIN preferences p ON p.subscriber_id = s.id AND p.enabled = 1
@@ -42,22 +41,26 @@ async function computeAllEvents(env) {
 
   console.log(`[event-computer] Processing ${subscribers.length} subscribers`);
 
+  // Astronomy results keyed by location cell, shared across subscribers who
+  // live near each other. See utils/events.js.
+  const cache = new Map();
+
   for (const subscriber of subscribers) {
     const types = subscriber.subscribed_types
       ? subscriber.subscribed_types.split(',')
       : [];
 
-    await processSubscriber(subscriber, types, now, env);
+    await processSubscriber(subscriber, types, now, env, cache);
   }
 
   console.log('[event-computer] Done');
 }
 
-async function processSubscriber(subscriber, types, now, env) {
+async function processSubscriber(subscriber, types, now, env, cache) {
   const allEvents = [];
 
   if (types.includes('meteor')) {
-    const meteorEvents = await computeMeteorEvents(subscriber, now, env.DB);
+    const meteorEvents = await computeMeteorEvents(subscriber, now, env.DB, cache);
     allEvents.push(...meteorEvents);
   }
 
@@ -67,23 +70,18 @@ async function processSubscriber(subscriber, types, now, env) {
   }
 
   if (types.includes('fullmoon')) {
-    const fullMoonEvents = await computeFullMoonEvents(subscriber, now, env.DB);
+    const fullMoonEvents = await computeFullMoonEvents(subscriber, now, env.DB, cache);
     allEvents.push(...fullMoonEvents);
   }
 
   if (types.includes('lunar_eclipse') || types.includes('solar_eclipse')) {
-    const eclipseEvents = await computeEclipseEvents(subscriber, now, env.DB);
+    const eclipseEvents = await computeEclipseEvents(subscriber, now, env.DB, cache);
     // Filter by which eclipse types the subscriber wants
     for (const evt of eclipseEvents) {
       if (types.includes(evt.event_type)) {
         allEvents.push(evt);
       }
     }
-  }
-
-  if (types.includes('asteroid')) {
-    const asteroidEvents = await computeAsteroidEvents(subscriber, now, env.DB);
-    allEvents.push(...asteroidEvents);
   }
 
   if (types.includes('starlink')) {

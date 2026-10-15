@@ -110,15 +110,12 @@
           </div>
         </label>
 
-        <label class="checkbox-item">
-          <input type="checkbox" name="event_type" value="asteroid" checked>
-          <div class="checkbox-label">
-            <strong>☄️ Asteroid Close Approaches</strong>
-            <span>Notable space rocks flying by</span>
-          </div>
-        </label>
-
       </div>
+
+      <!-- Clear-sky check: always on (it used to be an opt-in checkbox) -->
+      <p style="margin:20px 0 16px;font-size:0.85rem;line-height:1.6;opacity:0.75;">
+        ☁️ We check the forecast before every alert. If it's too cloudy to see anything, we skip it.
+      </p>
 
       <div id="form-error" style="color:#f87171;font-size:0.85rem;margin-bottom:12px;display:none;" role="alert"></div>
 
@@ -133,7 +130,7 @@
   </div>
 
   <script>
-    const API_BASE = 'https://whentolook-api.link7373.workers.dev';
+    const API_BASE = 'https://api.whentolook.com';
 
     // Pre-fill email from URL param
     const params = new URLSearchParams(location.search);
@@ -258,6 +255,9 @@
             timezone: tz,
             location_name: locName,
             preferences: prefs,
+            referral_source: params.get('ref') || (function() {
+              try { return sessionStorage.getItem('wtl_ref') || undefined; } catch (_) { return undefined; }
+            })(),
           }),
         });
 
