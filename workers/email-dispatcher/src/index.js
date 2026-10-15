@@ -1,6 +1,6 @@
 // index.js
 import { notify } from './notify.js';
-import { getCloudCover } from './weather.js';
+import { getCloudCoverAt } from './weather.js';
 // The eclipse table lives with the event computer. It's imported here only so the
 // health check can warn before the data runs out. Wrangler bundles it at deploy time.
 import { ECLIPSE_DATA_THROUGH } from '../../event-computer/src/data/eclipses.js';
@@ -163,7 +163,7 @@ async function dispatch(env) {
 
   const { results } = await env.DB.prepare(`
     SELECT eq.*, s.email, s.timezone, s.unsubscribe_token,
-           s.suppress_if_cloudy, s.latitude, s.longitude
+           s.latitude, s.longitude
     FROM event_queue eq
     JOIN subscribers s ON s.id = eq.subscriber_id
     WHERE eq.status = 'pending'
@@ -177,6 +177,45 @@ async function dispatch(env) {
   }
 }
 
+// At or above this forecast cloud cover, there's nothing to see.
+const CLOUDY_PERCENT = 80;
+
+// The hours a subscriber would be outside looking, for the clear-sky check.
+// Returns [] for alerts that should go out whatever the weather:
+//  - day-before reminders: their job is planning (including driving somewhere
+//    clearer), and a forecast a day out is unreliable anyway;
+//  - solar eclipses: rare, and the daytime darkening of a big eclipse is
+//    unmistakable even under cloud.
+function viewingTimes(event) {
+  let data;
+  try { data = JSON.parse(event.event_data); } catch { return [event.notify_at]; }
+  if (data.is_reminder) return [];
+
+  const HOUR = 60 * 60 * 1000;
+  const plus = (iso, hours) => new Date(Date.parse(iso) + hours * HOUR).toISOString();
+
+  switch (event.event_type) {
+    case 'solar_eclipse':
+      return [];
+    case 'iss':
+    case 'starlink':
+      return [data.start_utc ?? plus(event.notify_at, 1)];
+    case 'meteor': {
+      // The first few hours of darkness; any clear hour is worth going out for.
+      const start = data.dark_start ?? event.notify_at;
+      return [0, 1, 2, 3].map(h => plus(start, h));
+    }
+    case 'fullmoon': {
+      const rise = data.moonrise_utc ?? event.notify_at;
+      return [rise, plus(rise, 1), plus(rise, 2)];
+    }
+    case 'lunar_eclipse':
+      return [data.partial_start ?? data.penumbral_start, data.maximum].filter(Boolean);
+    default:
+      return [event.notify_at];
+  }
+}
+
 // Returns the moment after which this event is no longer worth delivering.
 function stalenessDeadline(event) {
   const hours = FRESHNESS_HOURS[event.event_type] ?? DEFAULT_FRESHNESS_HOURS;
@@ -184,15 +223,22 @@ function stalenessDeadline(event) {
 }
 
 async function processEvent(event, env) {
-  // Weather suppression: skip if subscriber opted in and cloud cover >= 80%
-  if (event.suppress_if_cloudy) {
-    const cover = await getCloudCover(event.latitude, event.longitude, event.notify_at);
-    if (cover !== null && cover >= 80) {
+  // Clear-sky check, for every subscriber. It looks at the hours they'd
+  // actually be looking up, not when the email goes out. The event is skipped
+  // only if every one of those hours is forecast cloudy.
+  const times = viewingTimes(event);
+  if (times.length > 0) {
+    const covers = await getCloudCoverAt(event.latitude, event.longitude, times);
+    const known = covers.filter(c => c !== null);
+    if (known.length > 0 && known.every(c => c >= CLOUDY_PERCENT)) {
       await env.DB.prepare(
         `UPDATE event_queue SET status = 'skipped_weather' WHERE id = ?`
       ).bind(event.id).run();
-      console.log(`[dispatcher] Skipped ${event.id} (${event.event_type}) — cloud cover ${cover}%`);
+      console.log(`[dispatcher] Skipped ${event.id} (${event.event_type}) — cloud cover ${known.join('/')}%`);
       return;
+    }
+    if (known.length === 0) {
+      console.warn(`[dispatcher] Cloud cover unavailable for ${event.id}, sending anyway`);
     }
   }
 

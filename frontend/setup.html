@@ -112,15 +112,10 @@
 
       </div>
 
-      <!-- Weather suppression option -->
-      <span class="form-label-heading" style="margin-top:20px;">Notification options</span>
-      <label class="checkbox-item" style="max-width:100%;">
-        <input type="checkbox" id="suppress-if-cloudy" name="suppress_if_cloudy">
-        <div class="checkbox-label">
-          <strong>☁️ Skip alerts if the sky is overcast</strong>
-          <span>We'll check the weather forecast before sending — if cloud cover is over 80%, we'll hold the notification</span>
-        </div>
-      </label>
+      <!-- Clear-sky check: always on (it used to be an opt-in checkbox) -->
+      <p style="margin:20px 0 16px;font-size:0.85rem;line-height:1.6;opacity:0.75;">
+        ☁️ We check the forecast before every alert. If it's too cloudy to see anything, we skip it.
+      </p>
 
       <div id="form-error" style="color:#f87171;font-size:0.85rem;margin-bottom:12px;display:none;" role="alert"></div>
 
@@ -260,7 +255,6 @@
             timezone: tz,
             location_name: locName,
             preferences: prefs,
-            suppress_if_cloudy: document.getElementById('suppress-if-cloudy').checked,
             referral_source: params.get('ref') || (function() {
               try { return sessionStorage.getItem('wtl_ref') || undefined; } catch (_) { return undefined; }
             })(),

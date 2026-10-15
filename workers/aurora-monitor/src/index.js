@@ -1,7 +1,10 @@
 // index.js — Aurora Monitor
 // Runs every 15 minutes. Fetches current Kp index from NOAA.
 // If Kp meets the threshold for any subscriber's latitude, sends an immediate alert.
-// Bypasses event_queue for real-time delivery. 12-hour suppression prevents spam.
+// Bypasses event_queue for real-time delivery.
+//
+// Limits per subscriber: at most one alert per 12 hours (one per storm) and at
+// most MAX_ALERTS_PER_WEEK in any rolling 7 days. Never when it's cloudy.
 
 import { sendEmail } from './mailer.js';
 import { getCloudCover } from './weather.js';
@@ -61,14 +64,32 @@ function solarAltitudeDeg(latDeg, lonDeg, date) {
   return toDeg(Math.asin(sinAlt));
 }
 
+const MAX_ALERTS_PER_WEEK = 2;
+// Same threshold the dispatcher uses for every other event type.
+const CLOUDY_PERCENT = 80;
+
+// Latest observed Kp. Throws unless it's a real number in Kp's 0–9 range.
+//
+// NOAA changed this feed from rows like ["time_tag", "Kp", ...] to objects like
+// {"time_tag": ..., "Kp": 2.0}. The old parser read row[1], got undefined, and
+// returned NaN. Every comparison with NaN is false, so "Kp too low" and the
+// latitude threshold never skipped anyone. Subscribers got a "Kp NaN" alert
+// whenever the 12h suppression lapsed: 67 false alerts from 2026-03-31.
+// Both shapes are accepted now. Anything else fails closed, with no alert.
 async function fetchCurrentKp() {
-  const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+  const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', {
+    signal: AbortSignal.timeout(10000),
+  });
   if (!res.ok) throw new Error(`NOAA fetch failed: ${res.status}`);
   const data = await res.json();
-  // Array of [time_tag, Kp, ...], most recent last. Skip header row.
-  const rows = data.filter(row => row[0] !== 'time_tag');
-  const latest = rows[rows.length - 1];
-  return parseFloat(latest[1]);
+  if (!Array.isArray(data)) throw new Error('NOAA Kp feed is not an array');
+
+  const kpOf = row => Array.isArray(row) ? parseFloat(row[1]) : parseFloat(row?.Kp);
+  for (let i = data.length - 1; i >= 0; i--) {
+    const kp = kpOf(data[i]);
+    if (Number.isFinite(kp) && kp >= 0 && kp <= 9) return kp;
+  }
+  throw new Error(`No valid Kp value in NOAA feed (first row: ${JSON.stringify(data[0]).slice(0, 120)})`);
 }
 
 async function sendAuroraEmail(subscriber, kp, { apiKey }) {
@@ -187,6 +208,12 @@ async function checkAurora(env, kpOverride = null) {
     return;
   }
 
+  // Belt and braces for the /trigger?kp= override: NaN slips past every check below.
+  if (!Number.isFinite(currentKp)) {
+    console.error(`[aurora] Kp is not a number (${currentKp}), skipping`);
+    return;
+  }
+
   console.log(`[aurora] Current Kp: ${currentKp}`);
 
   // No aurora visible below Kp 2 anywhere
@@ -197,7 +224,7 @@ async function checkAurora(env, kpOverride = null) {
 
   // Fetch all aurora-subscribed, active, confirmed subscribers
   const { results: subscribers } = await env.DB.prepare(`
-    SELECT s.id, s.email, s.latitude, s.longitude, s.timezone, s.unsubscribe_token, s.suppress_if_cloudy
+    SELECT s.id, s.email, s.latitude, s.longitude, s.timezone, s.unsubscribe_token
     FROM subscribers s
     JOIN preferences p ON p.subscriber_id = s.id AND p.event_type = 'aurora' AND p.enabled = 1
     WHERE s.active = 1 AND s.confirmed = 1
@@ -205,8 +232,8 @@ async function checkAurora(env, kpOverride = null) {
 
   console.log(`[aurora] Checking ${subscribers.length} aurora subscribers`);
 
-  // 12-hour suppression window
   const suppressAfter = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   for (const sub of subscribers) {
     const minKp = minKpForLatitude(sub.latitude);
@@ -223,6 +250,16 @@ async function checkAurora(env, kpOverride = null) {
       continue;
     }
 
+    // Weekly cap: an active stretch of space weather shouldn't fill the inbox.
+    const thisWeek = await env.DB.prepare(`
+      SELECT COUNT(*) AS n FROM notification_log
+      WHERE subscriber_id = ? AND event_type = 'aurora' AND sent_at > ?
+    `).bind(sub.id, weekAgo).first();
+    if ((thisWeek?.n ?? 0) >= MAX_ALERTS_PER_WEEK) {
+      console.log(`[aurora] Suppressed for ${sub.email} (${thisWeek.n} alerts in the last 7 days)`);
+      continue;
+    }
+
     // Daytime check: aurora isn't visible if the sun is above civil twilight (-6°)
     const sunAlt = solarAltitudeDeg(sub.latitude, sub.longitude, new Date());
     if (sunAlt > -6) {
@@ -230,18 +267,15 @@ async function checkAurora(env, kpOverride = null) {
       continue;
     }
 
-    // Weather suppression: skip if subscriber opted in and it's cloudy right now
-    if (sub.suppress_if_cloudy) {
-      let cover = null;
-      try {
-        cover = await getCloudCover(sub.latitude, sub.longitude, new Date().toISOString());
-      } catch (err) {
-        console.warn(`[aurora] Weather check failed for ${sub.email}, proceeding:`, err.message);
-      }
-      if (cover !== null && cover >= 80) {
-        console.log(`[aurora] Skipped for ${sub.email} — cloud cover ${cover}%`);
-        continue;
-      }
+    // Clear skies, for everyone. Aurora under cloud is invisible, and the alert
+    // says "go outside now". If the forecast can't be fetched, send anyway: a
+    // possibly-cloudy alert beats missing a real storm.
+    const cover = await getCloudCover(sub.latitude, sub.longitude, new Date().toISOString());
+    if (cover === null) {
+      console.warn(`[aurora] Cloud cover unavailable for ${sub.email}, sending anyway`);
+    } else if (cover >= CLOUDY_PERCENT) {
+      console.log(`[aurora] Skipped for ${sub.email} — cloud cover ${cover}%`);
+      continue;
     }
 
     // Send directly
